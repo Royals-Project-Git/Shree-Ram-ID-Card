@@ -589,7 +589,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
         )
       })}
 
-      {/* Fields — FLOW mode: tabular list, equal label column, value aligned */}
+      {/* Fields — FLOW mode: 2-column layout (name first, address last, others paired) */}
       {config.layoutMode === 'flow' && (() => {
         const fSize    = config.fontSize || 11
         const lSize    = Math.max(fSize - 1, 7)
@@ -601,80 +601,105 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
         const ph       = Math.round(pw * 4 / 3)
         const px       = config.photoX ?? 16
         const py       = config.photoY ?? 90
-        // auto startY: below photo bottom or below header, whichever is lower
         const autoStartY = Math.max(headerH + 8, py + ph + 10)
         const startY   = config.flowStartY ?? autoStartY
-        // auto startX: right of photo if photo is in left region, else margin
         const photoRight = px + pw + 10
         const autoStartX = photoRight < CW * 0.55 ? photoRight : 12
         const startX   = config.flowStartX ?? autoStartX
         const availW   = CW - startX - 12
 
-        return visibleFields.map((f, idx) => {
-          const val       = sub?.[f.key] || `[${f.label}]`
-          const topY      = startY + idx * rowGap
-          const isSel     = selected === f.key
-          const fs        = config.fieldStyles?.[f.key] || {}
-          const highlight = fs.highlight || false
-          const ffSize    = fs.fontSize  ?? fSize
-          const ffWeight  = fs.fontWeight ?? (highlight ? 700 : 600)
-          const textColor = fs.textColor  || (highlight ? '#fff' : '#1a1a2e')
-          const bgColor   = fs.bgColor    || (config.c1 || '#2352ff')
-          const uppercase = fs.uppercase  || false
-          const showLabel = fs.showLabel  !== false
-          const brad      = fs.borderRadius ?? 4
-          const fontFam   = fs.fontFamily  || config.globalFontFamily || 'Instrument Sans'
-          const displayVal = uppercase ? (val||'').toUpperCase() : val
+        // Full-width fields: name first, address last; everything else paired in 2 cols
+        const FULL_WIDTH_KEYS = ['name', 'address']
+        const present = visibleFields
+        const fullWidthFirst = present.filter(f => f.key === 'name')
+        const fullWidthLast  = present.filter(f => f.key === 'address')
+        const paired         = present.filter(f => !FULL_WIDTH_KEYS.includes(f.key))
 
-          if (highlight) {
-            return (
-              <div key={f.key}
-                onClick={e => { e.stopPropagation(); onSelect(f.key) }}
-                style={{
-                  position: 'absolute', left: startX, top: topY, width: availW, zIndex: isSel ? 60 : 10,
-                  display: 'flex', alignItems: 'center',
-                  background: bgColor, borderRadius: brad, padding: '3px 8px',
-                  border: isSel ? `2px dashed rgba(255,255,255,.7)` : '2px dashed transparent',
-                  cursor: 'default',
-                  justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
-                }}>
-                <span style={{
-                  fontSize: ffSize, fontWeight: ffWeight, color: textColor,
-                  letterSpacing: uppercase ? 1.5 : 0.2, textTransform: uppercase ? 'uppercase' : 'none',
-                  flex: 1, textAlign: align === 'center' ? 'center' : align === 'right' ? 'right' : 'left',
-                  fontFamily: fontFam,
-                }}>{displayVal}</span>
-              </div>
-            )
-          }
+        const rows = []
+        fullWidthFirst.forEach(f => rows.push({ fields: [f], isFullWidth: true }))
+        for (let i = 0; i < paired.length; i += 2) {
+          const row = [paired[i]]
+          if (paired[i + 1]) row.push(paired[i + 1])
+          rows.push({ fields: row, isFullWidth: false })
+        }
+        fullWidthLast.forEach(f => rows.push({ fields: [f], isFullWidth: true }))
 
-          return (
-            <div key={f.key}
-              onClick={e => { e.stopPropagation(); onSelect(f.key) }}
-              style={{
-                position: 'absolute', left: startX, top: topY, width: availW, zIndex: isSel ? 60 : 10,
-                display: 'flex', alignItems: 'baseline',
-                border: isSel ? `1.5px dashed ${config.c1}` : '1.5px dashed transparent',
-                background: isSel ? `${config.c1}09` : 'transparent',
-                borderRadius: 4, padding: '1px 4px', cursor: 'default',
-                justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
-              }}>
-              {showLabel && <span style={{
-                fontSize: lSize, fontWeight: 700, color: '#333',
-                width: lw, minWidth: lw, flexShrink: 0, whiteSpace: 'nowrap',
-                textAlign: align === 'right' ? 'right' : 'left',
-              }}>{f.label}</span>}
-              {showLabel && <span style={{ fontSize: lSize, fontWeight: 700, color: '#555', margin: '0 4px 0 0', flexShrink: 0 }}>:</span>}
-              <span style={{
-                fontSize: ffSize, fontWeight: ffWeight, color: textColor,
-                flex: 1, wordBreak: 'break-word', lineHeight: 1.3,
-                textAlign: align === 'right' ? 'right' : 'left',
-                textTransform: uppercase ? 'uppercase' : 'none',
-                fontFamily: fontFam,
-              }}>{displayVal}</span>
-            </div>
-          )
+        const elements = []
+        let currentY = startY
+
+        rows.forEach((row) => {
+          const colW = row.isFullWidth ? availW : Math.floor((availW - 4) / 2)
+
+          row.fields.forEach((f, colIdx) => {
+            const val       = sub?.[f.key] || `[${f.label}]`
+            const leftX     = row.isFullWidth ? startX : startX + colIdx * (colW + 4)
+            const isSel     = selected === f.key
+            const fs        = config.fieldStyles?.[f.key] || {}
+            const highlight = fs.highlight || false
+            const ffSize    = fs.fontSize  ?? fSize
+            const ffWeight  = fs.fontWeight ?? (highlight ? 700 : 600)
+            const textColor = fs.textColor  || (highlight ? '#fff' : '#1a1a2e')
+            const bgColor   = fs.bgColor    || (config.c1 || '#2352ff')
+            const uppercase = fs.uppercase  || false
+            const showLabel = fs.showLabel  !== false
+            const brad      = fs.borderRadius ?? 4
+            const fontFam   = fs.fontFamily  || config.globalFontFamily || 'Instrument Sans'
+            const displayVal = uppercase ? (val||'').toUpperCase() : val
+            const fieldLW    = row.isFullWidth ? lw : Math.min(lw, Math.floor(colW * 0.45))
+
+            if (highlight) {
+              elements.push(
+                <div key={f.key}
+                  onClick={e => { e.stopPropagation(); onSelect(f.key) }}
+                  style={{
+                    position: 'absolute', left: leftX, top: currentY, width: row.isFullWidth ? availW : colW, zIndex: isSel ? 60 : 10,
+                    display: 'flex', alignItems: 'center',
+                    background: bgColor, borderRadius: brad, padding: '3px 8px',
+                    border: isSel ? `2px dashed rgba(255,255,255,.7)` : '2px dashed transparent',
+                    cursor: 'default',
+                    justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
+                  }}>
+                  <span style={{
+                    fontSize: ffSize, fontWeight: ffWeight, color: textColor,
+                    letterSpacing: uppercase ? 1.5 : 0.2, textTransform: uppercase ? 'uppercase' : 'none',
+                    flex: 1, textAlign: align === 'center' ? 'center' : align === 'right' ? 'right' : 'left',
+                    fontFamily: fontFam,
+                  }}>{displayVal}</span>
+                </div>
+              )
+            } else {
+              elements.push(
+                <div key={f.key}
+                  onClick={e => { e.stopPropagation(); onSelect(f.key) }}
+                  style={{
+                    position: 'absolute', left: leftX, top: currentY, width: row.isFullWidth ? availW : colW, zIndex: isSel ? 60 : 10,
+                    display: 'flex', alignItems: 'baseline',
+                    border: isSel ? `1.5px dashed ${config.c1}` : '1.5px dashed transparent',
+                    background: isSel ? `${config.c1}09` : 'transparent',
+                    borderRadius: 4, padding: '1px 4px', cursor: 'default',
+                    justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
+                  }}>
+                  {showLabel && <span style={{
+                    fontSize: lSize, fontWeight: 700, color: '#333',
+                    width: fieldLW, minWidth: fieldLW, flexShrink: 0, whiteSpace: 'nowrap',
+                    textAlign: align === 'right' ? 'right' : 'left',
+                  }}>{f.label}</span>}
+                  {showLabel && <span style={{ fontSize: lSize, fontWeight: 700, color: '#555', margin: '0 4px 0 0', flexShrink: 0 }}>:</span>}
+                  <span style={{
+                    fontSize: ffSize, fontWeight: ffWeight, color: textColor,
+                    flex: 1, wordBreak: 'break-word', lineHeight: 1.3,
+                    textAlign: align === 'right' ? 'right' : 'left',
+                    textTransform: uppercase ? 'uppercase' : 'none',
+                    fontFamily: fontFam,
+                  }}>{displayVal}</span>
+                </div>
+              )
+            }
+          })
+          currentY += rowGap
         })
+
+        return elements
       })()}
 
       {/* Snap grid dots — only while dragging */}
@@ -1175,8 +1200,8 @@ export default function IDCardBuilder() {
                   return (
                     <div key={f.key}
                       draggable
-                      onDragStart={() => setDragFieldIdx(idx)}
-                      onDragOver={e => { e.preventDefault(); setDragOverIdx(idx) }}
+                      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(idx)); setDragFieldIdx(idx) }}
+                      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverIdx(idx) }}
                       onDragEnd={() => { setDragFieldIdx(null); setDragOverIdx(null) }}
                       onDrop={e => {
                         e.preventDefault()

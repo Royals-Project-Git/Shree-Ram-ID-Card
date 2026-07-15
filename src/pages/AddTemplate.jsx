@@ -189,7 +189,7 @@ export default function AddTemplate() {
         {/* ── Left: Form ── */}
         <div className="at-left-form" style={{ padding: '36px 44px', borderRight: '1px solid var(--border)', overflowY: 'auto' }}>
           <div style={{ marginBottom: 28 }}>
-            <div style={{ fontSize: 12, color: 'var(--blue)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, marginBottom: 4 }}>WideSoftech Pvt. Ltd.</div>
+            {/* <div style={{ fontSize: 12, color: 'var(--blue)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, marginBottom: 4 }}>WideSoftech Pvt. Ltd.</div> */}
             <h1 style={{ fontFamily: 'Outfit,sans-serif', fontSize: 26, fontWeight: 900, color: 'var(--ink)', letterSpacing: -.5 }}>Generate Form Link</h1>
             <p style={{ fontSize: 14, color: 'var(--ink2)', marginTop: 4 }}>Configure fields and create a shareable form link for your organization.</p>
           </div>
