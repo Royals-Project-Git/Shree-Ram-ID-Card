@@ -959,6 +959,8 @@ export default function IDCardBuilder() {
   const [photoSizeDraft, setPhotoSizeDraft] = useState(null)  // null = show config value; string = mid-typing
   const [fontSizeDraft,  setFontSizeDraft]  = useState(null)
   const [fsFontDraft,    setFsFontDraft]    = useState(null)
+  const [cardWDraft,     setCardWDraft]     = useState(null)
+  const [cardHDraft,     setCardHDraft]     = useState(null)
 
   useEffect(() => { setFsFontDraft(null) }, [selected])  // reset per-field draft when switching fields
   const bgInputRef    = useRef(null)
@@ -1649,15 +1651,56 @@ export default function IDCardBuilder() {
             </div>
             <div style={{ marginBottom:16 }}>
               <div style={{ fontSize:10, fontWeight:700, color:'var(--ink3)', textTransform:'uppercase', letterSpacing:.6, marginBottom:8 }}>Custom Size</div>
-              {[['Width',config.cardW||340,setCardW,200,600],['Height',config.cardH||480,setCardH,200,700]].map(([label,val,setter,min,max]) => (
-                <div key={label} style={{ marginBottom:10 }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
-                    <span style={{ fontSize:11, color:'var(--ink3)' }}>{label}</span>
-                    <span style={{ fontSize:11, fontFamily:'JetBrains Mono,monospace', color:'var(--blue)', fontWeight:700 }}>{val}px</span>
+              
+              {/* Width Control */}
+              <div style={{ marginBottom:10 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+                  <span style={{ fontSize:11, color:'var(--ink3)' }}>Width</span>
+                  <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                    <input type="text" inputMode="numeric" pattern="[0-9]*"
+                      value={cardWDraft ?? String(config.cardW||340)}
+                      onChange={e => {
+                        const raw = e.target.value.replace(/[^0-9]/g, '')
+                        setCardWDraft(raw)
+                        if (raw !== '') setCardW(Number(raw))
+                      }}
+                      onBlur={e => {
+                        const clamped = Math.min(800, Math.max(150, Number(e.target.value)||340))
+                        setCardW(clamped)
+                        setCardWDraft(null)
+                      }}
+                      onKeyDown={e => { if (e.key==='Enter') e.target.blur() }}
+                      style={{ width:50, padding:'2px 6px', borderRadius:5, border:'1px solid var(--border)', fontSize:11, fontFamily:'JetBrains Mono,monospace', color:'var(--blue)', fontWeight:700, textAlign:'right', outline:'none' }}/>
+                    <span style={{ fontSize:10, color:'var(--ink3)' }}>px</span>
                   </div>
-                  <input type="range" min={min} max={max} step={10} value={val} onChange={e=>setter(Number(e.target.value))} style={{ width:'100%', accentColor:'#2352ff' }}/>
                 </div>
-              ))}
+                <input type="range" min={150} max={800} step={1} value={config.cardW||340} onChange={e=>{ setCardW(Number(e.target.value)); setCardWDraft(null) }} style={{ width:'100%', accentColor:'#2352ff' }}/>
+              </div>
+
+              {/* Height Control */}
+              <div style={{ marginBottom:10 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+                  <span style={{ fontSize:11, color:'var(--ink3)' }}>Height</span>
+                  <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                    <input type="text" inputMode="numeric" pattern="[0-9]*"
+                      value={cardHDraft ?? String(config.cardH||480)}
+                      onChange={e => {
+                        const raw = e.target.value.replace(/[^0-9]/g, '')
+                        setCardHDraft(raw)
+                        if (raw !== '') setCardH(Number(raw))
+                      }}
+                      onBlur={e => {
+                        const clamped = Math.min(1000, Math.max(150, Number(e.target.value)||480))
+                        setCardH(clamped)
+                        setCardHDraft(null)
+                      }}
+                      onKeyDown={e => { if (e.key==='Enter') e.target.blur() }}
+                      style={{ width:50, padding:'2px 6px', borderRadius:5, border:'1px solid var(--border)', fontSize:11, fontFamily:'JetBrains Mono,monospace', color:'var(--blue)', fontWeight:700, textAlign:'right', outline:'none' }}/>
+                    <span style={{ fontSize:10, color:'var(--ink3)' }}>px</span>
+                  </div>
+                </div>
+                <input type="range" min={150} max={1000} step={1} value={config.cardH||480} onChange={e=>{ setCardH(Number(e.target.value)); setCardHDraft(null) }} style={{ width:'100%', accentColor:'#2352ff' }}/>
+              </div>
             </div>
             <div>
               <div style={{ fontSize:10, fontWeight:700, color:'var(--ink3)', textTransform:'uppercase', letterSpacing:.6, marginBottom:8 }}>Background Image</div>
