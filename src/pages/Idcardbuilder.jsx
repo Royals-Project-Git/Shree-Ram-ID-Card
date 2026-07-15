@@ -791,10 +791,11 @@ function AlignIcon({ type }) {
 function AlignToolbar({ selected, multiSelected, config, onAlignOne, onAlignMulti, onDistribute, onNudge }) {
   const CW      = config.cardW || 340
   const CH      = config.cardH || 480
-  const hasOne  = !!(selected && selected !== '__photo__' || selected === '__photo__')
-  const hasAny  = !!(selected)
-  const hasGrp  = multiSelected && multiSelected.length >= 2
-  const has3    = multiSelected && multiSelected.length >= 3
+  const isFlow  = config.layoutMode === 'flow'
+  const hasOne  = !isFlow && !!(selected && selected !== '__photo__' || selected === '__photo__')
+  const hasAny  = !isFlow && !!(selected)
+  const hasGrp  = !isFlow && multiSelected && multiSelected.length >= 2
+  const has3    = !isFlow && multiSelected && multiSelected.length >= 3
   const c1      = config.c1 || '#2352ff'
 
   const btn = (onClick, iconType, tip, enabled, highlight) => (
@@ -1153,6 +1154,42 @@ export default function IDCardBuilder() {
     const maxY = isPhoto ? CH2-ph-30 : CH2-20
     onMove(key, snapTo(Math.max(0,Math.min(maxX,p.x+dx))), snapTo(Math.max(0,Math.min(maxY,p.y+dy))))
   }, [config, onMove])
+
+  // Handle keyboard nudge (arrow keys)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!selected) return
+      
+      // Do not nudge if user is typing in an input or textarea
+      const targetTag = e.target.tagName;
+      if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || e.target.isContentEditable) {
+        return
+      }
+
+      // Check if one of the arrow keys was pressed
+      const isArrow = ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].includes(e.key)
+      if (!isArrow) return
+
+      e.preventDefault()
+
+      // Nudge amount: 8px (SNAP) by default, 1px if Shift is held down for fine-tuning
+      const step = e.shiftKey ? 1 : SNAP
+      let dx = 0
+      let dy = 0
+
+      if (e.key === 'ArrowLeft')  dx = -step
+      if (e.key === 'ArrowRight') dx = step
+      if (e.key === 'ArrowUp')    dy = -step
+      if (e.key === 'ArrowDown')  dy = step
+
+      handleNudge(selected, dx, dy)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selected, handleNudge])
 
   if (subLoading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
@@ -2027,10 +2064,16 @@ export default function IDCardBuilder() {
           {/* Hint bar */}
           <div style={{ display:'flex', alignItems:'center', gap:8, background:'var(--paper)', borderRadius:10, padding:'6px 14px', border:'1px solid var(--border)', fontSize:11, flexWrap:'wrap', justifyContent:'center' }}>
             <span style={{ color:'var(--blue)', fontWeight:700 }}>●</span>
-            <span style={{ color:'var(--ink3)' }}>Drag to move · guides snap automatically</span>
-            <span style={{ color:'var(--border)' }}>|</span>
-            <span style={{ color:'#f59e0b', fontWeight:700 }}>Shift+click</span>
-            <span style={{ color:'var(--ink3)' }}>to select multiple → group align</span>
+            {config.layoutMode === 'flow' ? (
+              <span style={{ color:'var(--ink3)' }}>Flow Mode: Fields are aligned automatically. Drag the photo or QR code to place them.</span>
+            ) : (
+              <>
+                <span style={{ color:'var(--ink3)' }}>Drag to move · guides snap automatically</span>
+                <span style={{ color:'var(--border)' }}>|</span>
+                <span style={{ color:'#f59e0b', fontWeight:700 }}>Shift+click</span>
+                <span style={{ color:'var(--ink3)' }}>to select multiple → group align</span>
+              </>
+            )}
           </div>
 
           {/* Canvas */}
@@ -2058,7 +2101,9 @@ export default function IDCardBuilder() {
                 ? `${multiSelected.length} fields selected — use alignment toolbar above`
                 : selected==='__photo__'
                   ? '🖼 Photo selected — drag to move · use toolbar to align'
-                  : `✦ ${ALL_FIELDS.find(f=>f.key===selected)?.label||''} selected — drag or nudge · use toolbar to align`}
+                  : config.layoutMode === 'flow'
+                    ? `✦ ${ALL_FIELDS.find(f=>f.key===selected)?.label||''} selected · Alignment is automatic in Flow Mode`
+                    : `✦ ${ALL_FIELDS.find(f=>f.key===selected)?.label||''} selected — drag or nudge · use toolbar to align`}
             </div>
           )}
 
