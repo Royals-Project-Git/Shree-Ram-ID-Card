@@ -1,0 +1,11 @@
+node_modules
+dist
+.env.local
+.env
+*.local
+.DS_Store
+.env.example
+.firestore.rules
+.storage.rules
+cors.json
+serviceAccount.json

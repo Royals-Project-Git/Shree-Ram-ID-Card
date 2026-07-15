@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --blue: #2352ff;
+    --blue-d: #1538d4;
+    --blue-s: #e8ecff;
+    --blue-m: #b8c4ff;
+    --teal: #00c48c;
+    --teal-s: #e0faf2;
+    --amber: #f59e0b;
+    --amber-s: #fef3c7;
+    --red: #ef4444;
+    --red-s: #fee2e2;
+    --purple: #7c3aed;
+    --purple-s: #ede9fe;
+    --ink: #0b0f1e;
+    --ink2: #3a4068;
+    --ink3: #8b92b8;
+    --paper: #ffffff;
+    --paper2: #f5f6fc;
+    --paper3: #eef0f8;
+    --border: #e2e6f3;
+    --border2: #c8ceea;
+    --shadow: 0 2px 16px rgba(35,82,255,.07);
+    --shadow-lg: 0 12px 48px rgba(35,82,255,.14);
+    --shadow-xl: 0 24px 80px rgba(35,82,255,.2);
+    --r: 10px;
+    --rl: 16px;
+    --rxl: 24px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Instrument Sans', sans-serif;
+    background: var(--paper2);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  input, select, textarea, button { font-family: inherit; }
+}
+
+@layer utilities {
+  .font-display { font-family: 'Outfit', sans-serif; }
+  .font-mono-code { font-family: 'JetBrains Mono', monospace; }
+}
+
+/* ── Animations ─────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.72); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes floatY {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-10px); }
+}
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.anim-fade-up   { animation: fadeUp   0.32s ease both; }
+.anim-fade-in   { animation: fadeIn   0.25s ease both; }
+.anim-scale-in  { animation: scaleIn  0.3s cubic-bezier(.34,1.56,.64,1) both; }
+.anim-float     { animation: floatY   3.5s ease-in-out infinite; }
+.anim-slide-down{ animation: slideDown 0.28s ease both; }
+
+/* ── Skeleton loader ────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, var(--paper3) 25%, var(--paper2) 50%, var(--paper3) 75%);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 6px;
+}
+
+/* ── Crop overlay ───────────────────────────── */
+.crop-container {
+  position: relative;
+  width: 100%;
+  height: 320px;
+  background: #000;
+  border-radius: var(--rl);
+  overflow: hidden;
+}
