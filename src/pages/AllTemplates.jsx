@@ -11,6 +11,7 @@ import {
   getDocs, startAfter, getCountFromServer,
 } from 'firebase/firestore'
 import toast from 'react-hot-toast'
+import { validateCardLayout, checkCanvasIntegrity } from '../lib/layoutValidator'
 
 const PAGE_SIZE = 25
 const MAX_PAGES = 3   // admin can pick at most 3 pages (75 cards) per ZIP
@@ -812,6 +813,17 @@ export default function AllTemplates() {
         img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r })
       ))
 
+      // 1. Run layout validation check before capturing canvas
+      const { warnings: layoutWarnings, errors: layoutErrors } = validateCardLayout(cardEl, cardW, cardH)
+      if (layoutErrors.length > 0) {
+        console.error(`Layout validation errors for ${sub.name}:`, layoutErrors)
+        toast.error(`Layout validation failed: ${layoutErrors[0]}`)
+      }
+      if (layoutWarnings.length > 0) {
+        console.warn(`Layout validation warnings for ${sub.name}:`, layoutWarnings)
+        toast.error(`Warning: Alignment checks found ${layoutWarnings.length} minor alignment issue(s) on ${sub.name}'s card.`, { duration: 4000 })
+      }
+
       const SCALE = 4   // 4x = ~384 DPI — crisp for print and screen
 
       const canvas = await html2canvas(cardEl, {
@@ -826,6 +838,14 @@ export default function AllTemplates() {
         imageTimeout:    0,
         x: 0, y: 0, scrollX: 0, scrollY: 0,
       })
+
+      // 2. Verify canvas integrity (blank canvas / failed render check)
+      const integrity = checkCanvasIntegrity(canvas)
+      if (!integrity.ok) {
+        console.error('Canvas integrity check failed:', integrity.error)
+        toast.error(`Render Integrity Check Failed for ${sub.name}: ${integrity.error}`)
+        throw new Error(integrity.error)
+      }
 
       return canvas.toDataURL('image/jpeg', 1.0).split(',')[1]
 

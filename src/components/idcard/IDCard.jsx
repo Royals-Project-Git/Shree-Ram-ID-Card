@@ -269,10 +269,10 @@ const IDCard = forwardRef(function IDCard(
                 position:'absolute', left:pos.x, top:pos.y,
                 maxWidth: fieldMaxW,
                 padding:'2px 6px', zIndex:8,
-                display:'flex', alignItems:'baseline', gap:0,
+                display:'flex', alignItems:'flex-start', gap:0,
               }}>
-                {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', whiteSpace:'nowrap', display:'inline-block', minWidth:labelW }}>{f.label}</span>}
-                {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0 }}>:</span>}
+                {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', whiteSpace:'nowrap', display:'inline-block', minWidth:labelW, lineHeight:1.3 }}>{f.label}</span>}
+                {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0, lineHeight:1.3 }}>:</span>}
                 <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
                   textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
                   wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
@@ -402,15 +402,16 @@ const IDCard = forwardRef(function IDCard(
                   elements.push(
                     <div key={f.key} style={{
                       position: 'absolute', left: leftX, top: currentY, width: row.isFullWidth ? availW : colW, zIndex: 8,
-                      display: 'flex', alignItems: 'baseline',
+                      display: 'flex', alignItems: 'flex-start',
                       justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
                     }}>
                       {showLabel && <span style={{
                         fontSize: lSize, fontWeight: 700, color: '#333',
                         width: fieldLW, minWidth: fieldLW, flexShrink: 0, whiteSpace: 'nowrap',
                         textAlign: align === 'right' ? 'right' : 'left',
+                        lineHeight: 1.3,
                       }}>{f.label}</span>}
-                      {showLabel && <span style={{ fontSize: lSize, fontWeight: 700, color: '#555', margin: '0 4px 0 0', flexShrink: 0 }}>:</span>}
+                      {showLabel && <span style={{ fontSize: lSize, fontWeight: 700, color: '#555', margin: '0 4px 0 0', flexShrink: 0, lineHeight: 1.3 }}>:</span>}
                       <span style={{
                         fontSize: ffSize, fontWeight: ffWeight, color: textColor,
                         flex: 1, minWidth: 0, wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: 1.3,
@@ -588,9 +589,9 @@ const IDCard = forwardRef(function IDCard(
               ['Employee ID',   sub.employee_id],
               ['Address',       sub.address],
             ].map(([label, value]) => value ? (
-              <div key={label} style={{ display:'flex', alignItems:'baseline', gap:0 }}>
-                <span style={{ fontSize:10, fontWeight:700, color:'#555', whiteSpace:'nowrap', minWidth:72, flexShrink:0 }}>{label}</span>
-                <span style={{ fontSize:10, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0 }}>{' : '}</span>
+              <div key={label} style={{ display:'flex', alignItems:'flex-start', gap:0 }}>
+                <span style={{ fontSize:10, fontWeight:700, color:'#555', whiteSpace:'nowrap', minWidth:72, flexShrink:0, lineHeight:1.3 }}>{label}</span>
+                <span style={{ fontSize:10, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0, lineHeight:1.3 }}>{' : '}</span>
                 <span style={{ fontSize:11, fontWeight:600, color:'#1a1a2e', minWidth:0, wordBreak:'break-word', overflowWrap:'break-word', lineHeight:1.3 }}>{value}</span>
               </div>
             ) : null)}

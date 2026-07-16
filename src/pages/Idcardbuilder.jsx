@@ -6,6 +6,7 @@ import { useCardTemplates } from '../hooks/useCardtemplates'
 import { Btn, Spinner } from '../components/shared/index'
 import { uploadBgImage } from '../lib/firebase'
 import toast from 'react-hot-toast'
+import { validateCardLayout } from '../lib/layoutValidator'
 import QRCode from 'qrcode'
 
 const SNAP         = 8
@@ -426,9 +427,9 @@ function DragField({ f, config, val, isSel, isMul, onMouseDown, onClick }) {
         border: isSel?`1.5px dashed ${c1}`:isMul?'1.5px dashed #f59e0b':'1.5px dashed transparent',
         background: isSel?`${c1}11`:isMul?'#fef3c722':'transparent',
         cursor:'grab', transition:'border .15s, background .15s' }}>
-      <div style={{ display:'flex', alignItems:'baseline', gap:0 }}>
-        {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', whiteSpace:'nowrap', display:'inline-block', minWidth:labelW }}>{f.label}</span>}
-        {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0 }}>:</span>}
+      <div style={{ display:'flex', alignItems:'flex-start', gap:0 }}>
+        {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', whiteSpace:'nowrap', display:'inline-block', minWidth:labelW, lineHeight:1.3 }}>{f.label}</span>}
+        {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0, lineHeight:1.3 }}>:</span>}
         <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
           textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
           wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
@@ -536,7 +537,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
   const cardRadius = config.cornerStyle === 'sharp' ? 0 : 16
 
   return (
-    <div style={{ position:'relative', width:CW, height:CH, background:'#fff', borderRadius:cardRadius,
+    <div id="builder-card-canvas" style={{ position:'relative', width:CW, height:CH, background:'#fff', borderRadius:cardRadius,
       overflow:'hidden', border:cardBorder, boxShadow:'0 12px 48px rgba(0,0,0,.18)',
       userSelect:'none', flexShrink:0, fontFamily:'Instrument Sans,sans-serif' }}>
 
@@ -723,7 +724,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                   onClick={e => { e.stopPropagation(); onSelect(f.key) }}
                   style={{
                     position: 'absolute', left: leftX, top: currentY, width: row.isFullWidth ? availW : colW, zIndex: isSel ? 60 : 10,
-                    display: 'flex', alignItems: 'baseline',
+                    display: 'flex', alignItems: 'flex-start',
                     border: isSel ? `1.5px dashed ${config.c1}` : '1.5px dashed transparent',
                     background: isSel ? `${config.c1}09` : 'transparent',
                     borderRadius: 4, padding: '1px 4px', cursor: 'default',
@@ -733,8 +734,9 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                     fontSize: lSize, fontWeight: 700, color: '#333',
                     width: fieldLW, minWidth: fieldLW, flexShrink: 0, whiteSpace: 'nowrap',
                     textAlign: align === 'right' ? 'right' : 'left',
+                    lineHeight: 1.3,
                   }}>{f.label}</span>}
-                  {showLabel && <span style={{ fontSize: lSize, fontWeight: 700, color: '#555', margin: '0 4px 0 0', flexShrink: 0 }}>:</span>}
+                  {showLabel && <span style={{ fontSize: lSize, fontWeight: 700, color: '#555', margin: '0 4px 0 0', flexShrink: 0, lineHeight: 1.3 }}>:</span>}
                   <span style={{
                     fontSize: ffSize, fontWeight: ffWeight, color: textColor,
                     flex: 1, minWidth: 0, wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: 1.3,
@@ -1193,6 +1195,25 @@ export default function IDCardBuilder() {
   const handleSave = async () => {
     if (!templateName.trim()) { toast.error('Enter template name'); return }
     if (config.visibleFields.length===0) { toast.error('Add at least one field'); return }
+
+    // Run layout validation check
+    const cardEl = document.getElementById('builder-card-canvas')
+    if (cardEl) {
+      const CW = config.cardW || 340
+      const CH = config.cardH || 480
+      const { warnings, errors } = validateCardLayout(cardEl, CW, CH)
+      if (errors.length > 0) {
+        errors.forEach(err => toast.error(`Layout Error: ${err}`))
+        return
+      }
+      if (warnings.length > 0) {
+        const msg = `Layout Warnings:\n${warnings.slice(0, 3).map(w => '• ' + w).join('\n')}${warnings.length > 3 ? `\n• and ${warnings.length - 3} more issues.` : ''}\n\nDo you want to save anyway?`
+        if (!window.confirm(msg)) {
+          return
+        }
+      }
+    }
+
     setSaving(true)
     try {
       if (editId) {
