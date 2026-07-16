@@ -19,6 +19,51 @@ const fmtDate = d => {
   return isNaN(date) ? '—' : date.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
 }
 
+const CSV_COLUMNS = [
+  { key:'name',               label:'Name'              },
+  { key:'role',               label:'Role'              },
+  { key:'school_name',        label:'Organization'      },
+  { key:'class',              label:'Class'             },
+  { key:'section',            label:'Section'           },
+  { key:'year',               label:'Year'              },
+  { key:'roll_number',        label:'Roll No.'          },
+  { key:'admission_number',   label:'Admission No.'     },
+  { key:'student_id',         label:'Student ID'        },
+  { key:'fathers_name',       label:"Father's Name"     },
+  { key:'date_of_birth',      label:'Date of Birth'     },
+  { key:'blood_group',        label:'Blood Group'       },
+  { key:'contact_number',     label:'Contact No.'       },
+  { key:'emergency_contact',  label:'Emergency No.'     },
+  { key:'email_id',           label:'Email'             },
+  { key:'employee_id',        label:'Employee ID'       },
+  { key:'designation',        label:'Designation'       },
+  { key:'department',         label:'Department'        },
+  { key:'aadhar_card',        label:'Aadhaar No.'       },
+  { key:'valid_from',         label:'Valid From'        },
+  { key:'valid_till',         label:'Valid Till'        },
+  { key:'batch_timing',       label:'Batch / Timing'   },
+  { key:'address',            label:'Address'           },
+  { key:'mode_of_transport',  label:'Mode of Transport' },
+  { key:'status',             label:'Status'            },
+  { key:'submitted_at',       label:'Submitted At'      },
+]
+
+function exportCSV(rows, filename = 'submissions.csv') {
+  const escape = v => {
+    if (v == null) return ''
+    let s = typeof v === 'object' && v.toDate ? v.toDate().toLocaleDateString('en-IN') : String(v)
+    if (s.includes(',') || s.includes('"') || s.includes('\n')) s = `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+  const header = CSV_COLUMNS.map(c => c.label).join(',')
+  const body   = rows.map(row => CSV_COLUMNS.map(c => escape(row[c.key])).join(',')).join('\n')
+  const blob   = new Blob([`${header}\n${body}`], { type:'text/csv;charset=utf-8;' })
+  const url    = URL.createObjectURL(blob)
+  const a      = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+}
+
 const ORG_TYPE_ICONS = {
   School: '🏫', College: '🎓', Industry: '🏭',
   Company: '💼', Hospital: '🏥', Custom: '✏️',
@@ -81,7 +126,10 @@ export default function Admin() {
     currentPage, totalCount, totalPages,
     applyFilters, goToPage,
     updateStatus, updateSubmission, bulkUpdateStatus, deleteSubmission, bulkDeleteSubmissions,
+    fetchAllSubmissions,
   } = useSubmissions()
+
+  const [exporting, setExporting] = useState(false)
 
   // ALL organizations from DB — not filtered by current page
   const { organizations } = useOrganizations()
@@ -173,17 +221,17 @@ export default function Admin() {
     { key:'fathers_name',      label:"Father's Name",      type:'text'  },
     { key:'class',             label:'Class',              type:'text'  },
     { key:'section',           label:'Section',            type:'text'  },
-    { key:'roll_number',       label:'Roll Number',        type:'text'  },
+    { key:'roll_number',       label:'Roll No.',           type:'text'  },
     { key:'admission_number',  label:'Admission No.',      type:'text'  },
     { key:'date_of_birth',     label:'Date of Birth',      type:'date'  },
     { key:'blood_group',       label:'Blood Group',        type:'text'  },
-    { key:'contact_number',    label:'Contact Number',     type:'tel'   },
+    { key:'contact_number',    label:'Contact No.',        type:'tel'   },
     { key:'emergency_contact', label:'Emergency Contact',  type:'tel'   },
     { key:'email_id',          label:'Email',              type:'email' },
     { key:'employee_id',       label:'Employee ID',        type:'text'  },
     { key:'designation',       label:'Designation',        type:'text'  },
     { key:'department',        label:'Department',         type:'text'  },
-    { key:'aadhar_card',       label:'Aadhaar Number',     type:'text'  },
+    { key:'aadhar_card',       label:'Aadhaar No.',        type:'text'  },
     { key:'mode_of_transport', label:'Mode of Transport',  type:'text'  },
     { key:'address',           label:'Address',            type:'textarea'},
     { key:'valid_from',        label:'Valid From',         type:'date'  },
@@ -223,6 +271,52 @@ export default function Admin() {
       setViewSub(prev => prev?.id === editSub.id ? { ...prev, ...payload } : prev)
       setEditPhoto(null)
       setEditSub(null)
+    }
+  }
+
+  const handleExportCSV = async () => {
+    if (exporting) return
+    setExporting(true)
+    const toastId = toast.loading('Fetching all records for export...')
+    try {
+      const allSubmissions = await fetchAllSubmissions({ filterRole, filterSch: filterOrg, filterStat, sortBy })
+      
+      // Client-side: org-type filter + text search on top of the Firestore results
+      let rows = allSubmissions
+
+      if (filterType !== 'All') {
+        const namesForType = new Set(
+          organizations.filter(o => o.type === filterType).map(o => o.name)
+        )
+        rows = rows.filter(s => namesForType.has(s.school_name))
+      }
+
+      if (search) {
+        const q = search.toLowerCase()
+        rows = rows.filter(s =>
+          (s.name        || '').toLowerCase().includes(q) ||
+          (s.school_name || '').toLowerCase().includes(q)
+        )
+      }
+
+      if (rows.length === 0) {
+        toast.error('No data to export', { id: toastId })
+        return
+      }
+
+      const parts = ['submissions']
+      if (filterOrg  !== 'All') parts.push(filterOrg.replace(/\s+/g, '_'))
+      if (filterRole !== 'All') parts.push(filterRole)
+      if (filterStat !== 'All') parts.push(filterStat)
+      parts.push(new Date().toISOString().slice(0, 10))
+      
+      exportCSV(rows, `${parts.join('_')}.csv`)
+      toast.success(`Exported all ${rows.length} rows successfully!`, { id: toastId })
+    } catch (err) {
+      console.error('Export failed:', err)
+      toast.error('Export failed: ' + (err.message || 'unknown error'), { id: toastId })
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -273,6 +367,9 @@ export default function Admin() {
           <div className="admin-header-btns">
             <Btn variant="ghost" size="sm" onClick={() => navigate(-1)}>← Back</Btn>
             <Btn variant="ghost" size="sm" onClick={() => navigate('/templates')}>🪪 View ID Cards</Btn>
+            <Btn variant="ghost" size="sm" onClick={handleExportCSV} disabled={exporting}>
+              {exporting ? '⏳ Exporting...' : '⬇ Export CSV'}
+            </Btn>
             <Btn size="sm" onClick={() => navigate('/add-template')}>+ New Link</Btn>
           </div>
         </div>
@@ -507,15 +604,15 @@ export default function Admin() {
                     ['Blood Group',viewSub.blood_group],
                     ['Class',      viewSub.class],
                     ['Section',    viewSub.section],
-                    ['Roll Number',viewSub.roll_number],
-                    ['Admission No',viewSub.admission_number],
+                    ['Roll No.',viewSub.roll_number],
+                    ['Admission No.',viewSub.admission_number],
                     ['Date of Birth', formatDOB(viewSub.date_of_birth)],
                     ['Emergency',  viewSub.emergency_contact],
                     ['Designation',viewSub.designation],
                     ['Department', viewSub.department],
                     ['Employee ID',viewSub.employee_id],
                     ['Email',      viewSub.email_id],
-                    ['Aadhaar Number', viewSub.aadhar_card],
+                    ['Aadhaar No.', viewSub.aadhar_card],
                     ['Address',    viewSub.address],
                     ['Transport',  viewSub.mode_of_transport],
                     ['Valid From', formatDOB(viewSub.valid_from)],

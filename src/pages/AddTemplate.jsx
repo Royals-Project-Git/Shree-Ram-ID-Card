@@ -7,6 +7,30 @@ import toast from 'react-hot-toast'
 const ALL_FIELDS = ['Name','FathersName','ClassN','Section','DateofBirth','AdmissionNumber','RollNumber','EmployeeID','ContactNumber','EmergencyContact','BloodGroup','UploadYourPhoto','Address','ModeOfTransportation','Designation','AadhaarNumber','Department','EmailId','ValidFrom','ValidTill','BatchTiming']
 const ICONS = {Name:'👤',FathersName:'👨',ClassN:'🏫',Section:'📌',DateofBirth:'🎂',AdmissionNumber:'🔢',RollNumber:'🎯',EmployeeID:'🪪',ContactNumber:'📱',EmergencyContact:'🚨',BloodGroup:'🩸',UploadYourPhoto:'📷',Address:'📍',ModeOfTransportation:'🚌',Designation:'💼',AadhaarNumber:'🪪',Department:'🏢',EmailId:'✉️',ValidFrom:'📅',ValidTill:'📅',BatchTiming:'⏰'}
 
+const FIELD_LABELS = {
+  Name: 'Full Name',
+  FathersName: "Father's Name",
+  ClassN: 'Class',
+  Section: 'Section',
+  DateofBirth: 'Date of Birth',
+  AdmissionNumber: 'Admission No.',
+  RollNumber: 'Roll No.',
+  EmployeeID: 'Employee ID',
+  ContactNumber: 'Contact No.',
+  EmergencyContact: 'Emergency Contact',
+  BloodGroup: 'Blood Group',
+  UploadYourPhoto: 'Profile Photo',
+  Address: 'Address',
+  ModeOfTransportation: 'Mode of Transport',
+  Designation: 'Designation',
+  AadhaarNumber: 'Aadhaar No.',
+  Department: 'Department',
+  EmailId: 'Email ID',
+  ValidFrom: 'Valid From',
+  ValidTill: 'Valid Till',
+  BatchTiming: 'Batch / Timing',
+}
+
 const ORG_TYPES = [
   { value: 'School',   label: 'School',   icon: '🏫', placeholder: 'e.g. Netaji School, DPS Nagpur...'      },
   { value: 'College',  label: 'College',  icon: '🎓', placeholder: 'e.g. Prerna College, RCOEM...'          },
@@ -128,12 +152,15 @@ export default function AddTemplate() {
           {fields.length === 0
             ? <div style={{ textAlign:'center', color:'var(--ink3)', fontSize:13, padding:'20px 0' }}>Select fields to see preview</div>
             : <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                {fields.slice(0,5).map(f => (
-                  <div key={f}>
-                    <div style={{ fontSize:10, fontWeight:700, color:'var(--ink3)', textTransform:'uppercase', letterSpacing:.4, marginBottom:4 }}>{f.replace(/([A-Z])/g,' $1').trim()} *</div>
-                    <div style={{ background:'var(--paper2)', borderRadius:6, padding:'8px 10px', fontSize:12, color:'var(--ink3)', border:'1px solid var(--border)' }}>Enter {f.replace(/([A-Z])/g,' $1').trim().toLowerCase()}...</div>
-                  </div>
-                ))}
+                {fields.slice(0,5).map(f => {
+                   const lbl = FIELD_LABELS[f] || f.replace(/([A-Z])/g,' $1').trim()
+                   return (
+                     <div key={f}>
+                       <div style={{ fontSize:10, fontWeight:700, color:'var(--ink3)', textTransform:'uppercase', letterSpacing:.4, marginBottom:4 }}>{lbl} *</div>
+                       <div style={{ background:'var(--paper2)', borderRadius:6, padding:'8px 10px', fontSize:12, color:'var(--ink3)', border:'1px solid var(--border)' }}>Enter {lbl.toLowerCase()}...</div>
+                     </div>
+                   )
+                 })}
                 {fields.length > 5 && <div style={{ fontSize:11, color:'var(--ink3)', textAlign:'center' }}>+{fields.length-5} more fields...</div>}
               </div>
           }
@@ -283,7 +310,7 @@ export default function AddTemplate() {
                   <div key={f} onClick={() => toggleField(f)}
                     style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', borderRadius:'var(--r)', border:`1.5px solid ${on?'var(--blue)':'var(--border)'}`, background:on?'var(--blue-s)':'var(--paper)', cursor:'pointer', transition:'all .15s' }}>
                     <span style={{ fontSize:15, flexShrink:0 }}>{ICONS[f]}</span>
-                    <span style={{ fontSize:12, fontWeight:on?700:500, color:on?'var(--blue)':'var(--ink2)' }}>{f.replace(/([A-Z])/g,' $1').trim()}</span>
+                    <span style={{ fontSize:12, fontWeight:on?700:500, color:on?'var(--blue)':'var(--ink2)' }}>{FIELD_LABELS[f] || f.replace(/([A-Z])/g,' $1').trim()}</span>
                   </div>
                 )
               })}

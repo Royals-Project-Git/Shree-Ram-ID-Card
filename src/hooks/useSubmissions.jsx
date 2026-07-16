@@ -370,6 +370,21 @@ export function SubmissionsProvider({ children }) {
     }
   }, [])
 
+  const fetchAllSubmissions = useCallback(async (filters) => {
+    const { filterRole, filterSch, filterStat, sortBy } = filters
+    const c = []
+    if (filterStat !== 'All') c.push(where('status',      '==', filterStat.toLowerCase()))
+    if (filterRole !== 'All') c.push(where('role',        '==', filterRole))
+    if (filterSch  !== 'All') c.push(where('school_name', '==', filterSch))
+
+    const sortField = sortBy === 'name_asc' ? 'name' : 'submitted_at'
+    const sortDir   = (sortBy === 'date_asc' || sortBy === 'name_asc') ? 'asc' : 'desc'
+    c.push(orderBy(sortField, sortDir))
+
+    const snap = await getDocs(query(collection(db, 'submissions'), ...c))
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+  }, [])
+
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
 
   return (
@@ -395,6 +410,7 @@ export function SubmissionsProvider({ children }) {
       bulkDeleteSubmissions,
       checkDuplicate,
       checkDuplicateNow,
+      fetchAllSubmissions,
       fetchSubmissions: () => {},
     }}>
       {children}

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useSubmissions } from '../hooks/useSubmissions'
 import { useOrganizations } from '../hooks/useOrganizations'
@@ -237,7 +237,7 @@ const DEFAULT_CONFIG = {
   cornerStyle: 'rounded', // 'rounded' | 'sharp'
 }
 
-const snapTo = (v) => Math.round(v / SNAP) * SNAP
+const snapTo = (v) => Math.round(v)
 
 function computeGuides(dragKey, dragX, dragY, dragW, dragH, otherItems) {
   const guides = []
@@ -319,7 +319,7 @@ function QRElement({ config, sub, onMove, selected, onSelect }) {
       const dy = ev.clientY - dragRef.current.sy
       const nx = Math.max(0, Math.min(CW - size, dragRef.current.ox + dx))
       const ny = Math.max(0, Math.min(CH - size, dragRef.current.oy + dy))
-      onMove('__qr__', Math.round(nx / 8) * 8, Math.round(ny / 8) * 8)
+      onMove('__qr__', Math.round(nx), Math.round(ny))
     }
     const onMouseUp = () => {
       dragRef.current = null
@@ -416,6 +416,8 @@ function DragField({ f, config, val, isSel, isMul, onMouseDown, onClick }) {
     )
   }
 
+  const labelW = config.labelWidth || 72
+
   return (
     <div key={f.key} onMouseDown={onMouseDown} onClick={onClick}
       style={{ position:'absolute', left:pos.x, top:pos.y, zIndex:isSel?60:10,
@@ -425,8 +427,8 @@ function DragField({ f, config, val, isSel, isMul, onMouseDown, onClick }) {
         background: isSel?`${c1}11`:isMul?'#fef3c722':'transparent',
         cursor:'grab', transition:'border .15s, background .15s' }}>
       <div style={{ display:'flex', alignItems:'baseline', gap:0 }}>
-        {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', whiteSpace:'nowrap' }}>{f.label}</span>}
-        {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0 }}>{' : '}</span>}
+        {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', whiteSpace:'nowrap', display:'inline-block', minWidth:labelW }}>{f.label}</span>}
+        {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0 }}>:</span>}
         <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
           textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
           wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
@@ -759,16 +761,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
         return elements
       })()}
 
-      {/* Snap grid dots — only while dragging */}
-      {isDragging.current && (
-        <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', zIndex:3, pointerEvents:'none', opacity:.12 }}>
-          {Array.from({ length:Math.floor(CW/SNAP)+1 }, (_,i) =>
-            Array.from({ length:Math.floor(CH/SNAP)+1 }, (_,j) => (
-              <circle key={`${i}-${j}`} cx={i*SNAP} cy={j*SNAP} r={0.8} fill="#2352ff"/>
-            ))
-          )}
-        </svg>
-      )}
+
 
       {/* Guide lines */}
       {guides.map((g,i) => (
@@ -954,7 +947,7 @@ function AlignToolbar({ selected, multiSelected, config, onAlignOne, onAlignMult
 
       <Div/>
       <Label t="Nudge" />
-      {[['←',-SNAP,0,'Nudge Left'],['↑',0,-SNAP,'Nudge Up'],['↓',0,SNAP,'Nudge Down'],['→',SNAP,0,'Nudge Right']].map(([icon,dx,dy,tip]) => (
+      {[['←',-1,0,'Nudge Left'],['↑',0,-1,'Nudge Up'],['↓',0,1,'Nudge Down'],['→',1,0,'Nudge Right']].map(([icon,dx,dy,tip]) => (
         <button key={tip} title={tip} onClick={() => hasAny && onNudge(selected,dx,dy)}
           style={{ width:30, height:30, borderRadius:7, border:'1.5px solid var(--border)',
             background:'var(--paper)', color: hasAny?'var(--ink2)':'var(--ink3)',
@@ -1041,7 +1034,45 @@ export default function IDCardBuilder() {
   }, [editId, templates])
 
   const approved   = submissions.filter(s => s.status==='approved')
-  const previewSub = approved[previewIdx] || null
+  const [customPreviewSub, setCustomPreviewSub] = useState(null)
+  const previewSub = customPreviewSub || approved[previewIdx] || null
+
+  useEffect(() => {
+    const subId = searchParams.get('sub')
+    if (!subId) return
+    if (approved.length > 0) {
+      const idx = approved.findIndex(s => s.id === subId)
+      if (idx !== -1) {
+        setPreviewIdx(idx)
+        setCustomPreviewSub(null)
+        return
+      }
+    }
+    let active = true
+    const fetchSub = async () => {
+      try {
+        const { db } = await import('../lib/firebase')
+        const { doc, getDoc } = await import('firebase/firestore')
+        const snap = await getDoc(doc(db, 'submissions', subId))
+        if (snap.exists() && active) {
+          setCustomPreviewSub({ id: snap.id, ...snap.data() })
+        }
+      } catch (err) {
+        console.warn('Failed to fetch preview sub:', err)
+      }
+    }
+    fetchSub()
+    return () => { active = false }
+  }, [searchParams, approved])
+
+  const previewOptions = useMemo(() => {
+    const list = [...approved]
+    if (customPreviewSub && !list.some(s => s.id === customPreviewSub.id)) {
+      list.unshift(customPreviewSub)
+    }
+    return list
+  }, [approved, customPreviewSub])
+
   const orgName    = organizations.find(o => o.id===selectedOrg)?.name || previewSub?.school_name || ''
 
   const upd = useCallback((key, val) => setConfig(p => ({ ...p, [key]:val })), [])
@@ -1255,8 +1286,8 @@ export default function IDCardBuilder() {
 
       e.preventDefault()
 
-      // Nudge amount: 8px (SNAP) by default, 1px if Shift is held down for fine-tuning
-      const step = e.shiftKey ? 1 : SNAP
+      // Nudge amount is 1px for fine-tuning
+      const step = 1
       let dx = 0
       let dy = 0
 
@@ -2109,9 +2140,9 @@ export default function IDCardBuilder() {
                       {[
                         { val:'id',             label:'Submission ID',    desc:'Unique record ID' },
                         { val:'name',           label:'Full Name',        desc:'Student/staff name' },
-                        { val:'roll_number',    label:'Roll Number',      desc:'Roll / admission no.' },
-                        { val:'employee_id',    label:'Employee ID',      desc:'Employee ID number' },
-                        { val:'contact_number', label:'Contact Number',   desc:'Phone number' },
+                        { val:'roll_number',    label:'Roll No.',         desc:'Roll / admission no.' },
+                        { val:'employee_id',    label:'Employee ID',      desc:'Employee ID No.' },
+                        { val:'contact_number', label:'Contact No.',      desc:'Phone number' },
                         { val:'custom',         label:'Custom Text',      desc:'URL or your own value' },
                       ].map(({ val, label, desc }) => (
                         <div key={val} onClick={() => upd('qrData', val)}
@@ -2234,10 +2265,18 @@ export default function IDCardBuilder() {
           <div className="icb-chip" style={{ fontSize:11, color:'var(--ink3)', fontFamily:'JetBrains Mono,monospace', background:'var(--paper2)', border:'1px solid var(--border)', borderRadius:6, padding:'4px 8px', whiteSpace:'nowrap' }}>
             {CW}×{CH}
           </div>
-          {approved.length > 1 && (
-            <select value={previewIdx} onChange={e => setPreviewIdx(Number(e.target.value))}
+          {previewOptions.length > 0 && (
+            <select value={previewSub?.id || ''}
+              onChange={e => {
+                const selectedId = e.target.value
+                const idx = approved.findIndex(s => s.id === selectedId)
+                if (idx !== -1) {
+                  setPreviewIdx(idx)
+                  setCustomPreviewSub(null)
+                }
+              }}
               style={{ padding:'5px 8px', borderRadius:7, border:'1.5px solid var(--border)', background:'var(--paper)', color:'var(--ink)', fontSize:12, cursor:'pointer', fontFamily:'inherit', maxWidth:120 }}>
-              {approved.map((s,i) => <option key={s.id} value={i}>{s.name}</option>)}
+              {previewOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           )}
           <button className="icb-mob" onClick={() => setPanelOpen(o=>!o)}

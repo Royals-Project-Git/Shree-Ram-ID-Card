@@ -27,10 +27,10 @@ function useWindowWidth() {
 }
 
 /* ── Scale-to-fit card wrapper ───────────────────────────── */
-function CardWrapper({ sub, templateId, customConfig, orgLogo, onDownload, onDelete, cardRefs }) {
+function CardWrapper({ sub, templateId, customConfig, orgLogo, onDownload, onDelete, onEdit, cardRefs }) {
   const wrapRef = useRef(null)
   const [scale, setScale] = useState(1)
-  const naturalW = customConfig?.cardW || 340
+  const naturalW = customConfig ? (customConfig.cardW || 340) : 280
 
   useEffect(() => {
     const measure = () => {
@@ -44,7 +44,7 @@ function CardWrapper({ sub, templateId, customConfig, orgLogo, onDownload, onDel
     return () => ro.disconnect()
   }, [naturalW])
 
-  const naturalH = customConfig?.cardH || 480
+  const naturalH = customConfig ? (customConfig.cardH || 480) + 48 : 480
   const scaledH  = Math.round(naturalH * scale)
 
   return (
@@ -65,6 +65,7 @@ function CardWrapper({ sub, templateId, customConfig, orgLogo, onDownload, onDel
             showActions
             onDownload={onDownload}
             onDelete={onDelete}
+            onEdit={onEdit}
           />
         </div>
       </div>
@@ -261,6 +262,208 @@ function RangePickerModal({ totalCards, school, filterClass, filterSection, onCo
   )
 }
 
+/* ── Edit individual card details modal ──────────────────── */
+function EditCardModal({ submission, onSave, onClose }) {
+  const [fields, setFields] = useState({
+    name:              submission.name || '',
+    fathers_name:      submission.fathers_name || '',
+    class:             submission.class || '',
+    section:           submission.section || '',
+    roll_number:       submission.roll_number || '',
+    admission_number:  submission.admission_number || '',
+    student_id:        submission.student_id || '',
+    employee_id:       submission.employee_id || '',
+    designation:       submission.designation || '',
+    department:        submission.department || '',
+    date_of_birth:     submission.date_of_birth || '',
+    blood_group:       submission.blood_group || '',
+    contact_number:    submission.contact_number || '',
+    emergency_contact: submission.emergency_contact || '',
+    aadhar_card:       submission.aadhar_card || '',
+    mode_of_transport: submission.mode_of_transport || '',
+    valid_from:        submission.valid_from || '',
+    valid_till:        submission.valid_till || '',
+    batch_timing:      submission.batch_timing || '',
+    address:           submission.address || '',
+  })
+
+  const [saving, setSaving] = useState(false)
+
+  const handleChange = (key, value) => {
+    setFields(prev => ({ ...prev, [key]: value }))
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      await onSave(fields)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputStyle = {
+    width: '100%',
+    padding: '8px 12px',
+    borderRadius: '8px',
+    border: '1.5px solid var(--border)',
+    fontSize: '13px',
+    color: 'var(--ink)',
+    background: 'var(--paper)',
+    outline: 'none',
+    boxSizing: 'border-box',
+    fontFamily: 'inherit',
+  }
+
+  const labelStyle = {
+    fontSize: '11px',
+    fontWeight: '700',
+    color: 'var(--ink3)',
+    textTransform: 'uppercase',
+    letterSpacing: '.5px',
+    marginBottom: '4px',
+    display: 'block',
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 8500,
+      background: 'rgba(0,0,0,.5)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        background: 'var(--paper)', borderRadius: 20, width: 560, maxWidth: '95vw',
+        padding: '24px', boxShadow: '0 24px 64px rgba(0,0,0,.2)',
+        display: 'flex', flexDirection: 'column', gap: 16,
+        maxHeight: '90vh', overflowY: 'auto',
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '12px' }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>Edit ID Card Details</div>
+            <div style={{ fontSize: 12, color: 'var(--ink3)', marginTop: 2 }}>
+              Make adjustments for {submission.name || 'this individual'}
+            </div>
+          </div>
+          <button onClick={onClose}
+            style={{ border: 'none', background: 'transparent', fontSize: 20, cursor: 'pointer', color: 'var(--ink3)', lineHeight: 1 }}>
+            ✕
+          </button>
+        </div>
+
+        {/* Scrollable form fields */}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px' }}>
+            <div>
+              <label style={labelStyle}>Full Name</label>
+              <input style={inputStyle} type="text" value={fields.name} onChange={e => handleChange('name', e.target.value)} required />
+            </div>
+            <div>
+              <label style={labelStyle}>Father's Name</label>
+              <input style={inputStyle} type="text" value={fields.fathers_name} onChange={e => handleChange('fathers_name', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Class</label>
+              <input style={inputStyle} type="text" value={fields.class} onChange={e => handleChange('class', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Section</label>
+              <input style={inputStyle} type="text" value={fields.section} onChange={e => handleChange('section', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Roll No.</label>
+              <input style={inputStyle} type="text" value={fields.roll_number} onChange={e => handleChange('roll_number', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Admission No.</label>
+              <input style={inputStyle} type="text" value={fields.admission_number} onChange={e => handleChange('admission_number', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Student ID</label>
+              <input style={inputStyle} type="text" value={fields.student_id} onChange={e => handleChange('student_id', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Employee ID</label>
+              <input style={inputStyle} type="text" value={fields.employee_id} onChange={e => handleChange('employee_id', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Designation</label>
+              <input style={inputStyle} type="text" value={fields.designation} onChange={e => handleChange('designation', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Department</label>
+              <input style={inputStyle} type="text" value={fields.department} onChange={e => handleChange('department', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Date of Birth (YYYY-MM-DD)</label>
+              <input style={inputStyle} type="text" placeholder="YYYY-MM-DD" value={fields.date_of_birth} onChange={e => handleChange('date_of_birth', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Blood Group</label>
+              <select style={inputStyle} value={fields.blood_group} onChange={e => handleChange('blood_group', e.target.value)}>
+                <option value="">Select Blood Group</option>
+                {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => (
+                  <option key={bg} value={bg}>{bg}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Contact No.</label>
+              <input style={inputStyle} type="text" value={fields.contact_number} onChange={e => handleChange('contact_number', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Emergency Contact</label>
+              <input style={inputStyle} type="text" value={fields.emergency_contact} onChange={e => handleChange('emergency_contact', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Aadhaar No.</label>
+              <input style={inputStyle} type="text" value={fields.aadhar_card} onChange={e => handleChange('aadhar_card', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Transport</label>
+              <input style={inputStyle} type="text" value={fields.mode_of_transport} onChange={e => handleChange('mode_of_transport', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Valid From</label>
+              <input style={inputStyle} type="text" value={fields.valid_from} onChange={e => handleChange('valid_from', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Valid Till</label>
+              <input style={inputStyle} type="text" value={fields.valid_till} onChange={e => handleChange('valid_till', e.target.value)} />
+            </div>
+            <div style={{ gridColumn: 'span 2' }}>
+              <label style={labelStyle}>Batch / Timing</label>
+              <input style={inputStyle} type="text" value={fields.batch_timing} onChange={e => handleChange('batch_timing', e.target.value)} />
+            </div>
+            <div style={{ gridColumn: 'span 2' }}>
+              <label style={labelStyle}>Address</label>
+              <textarea style={{ ...inputStyle, height: '60px', resize: 'vertical' }} value={fields.address} onChange={e => handleChange('address', e.target.value)} />
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: 'flex', gap: 10, borderTop: '1px solid var(--border)', paddingTop: '16px', marginTop: '8px' }}>
+            <button type="button" onClick={onClose} disabled={saving}
+              style={{ flex: 1, padding: '11px', borderRadius: 10,
+                border: '1.5px solid var(--border)', background: 'transparent',
+                fontSize: '13px', fontWeight: 700, color: 'var(--ink2)', cursor: 'pointer', fontFamily: 'inherit' }}>
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              style={{ flex: 2, padding: '11px', borderRadius: 10,
+                border: 'none', background: 'var(--blue)',
+                fontSize: '13px', fontWeight: 800, color: '#fff', cursor: 'pointer', fontFamily: 'inherit',
+                opacity: saving ? 0.7 : 1 }}>
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 /* ── Reusable filter select ──────────────────────────────── */
 function FilterSelect({ label, value, onChange, options, placeholder }) {
   return (
@@ -285,7 +488,7 @@ function FilterSelect({ label, value, onChange, options, placeholder }) {
    MAIN PAGE
 ════════════════════════════════════════════════════════════ */
 export default function AllTemplates() {
-  const { submissions, loading, deleteSubmission, activeFilters } = useSubmissions()
+  const { submissions, loading, updateSubmission, deleteSubmission, activeFilters } = useSubmissions()
   const { organizations } = useOrganizations()
   const navigate          = useNavigate()
   const { templates, deleteTemplate, fetchTemplates } = useCardTemplates()
@@ -328,6 +531,7 @@ export default function AllTemplates() {
   const [deleteTplId, setDeleteTplId] = useState(null)
   const [leftOpen,    setLeftOpen]    = useState(false)
   const [rightOpen,   setRightOpen]   = useState(false)
+  const [editingSubmission, setEditingSubmission] = useState(null)
 
   /* ZIP download state */
   const [showRangePicker, setShowRangePicker] = useState(false)
@@ -1094,6 +1298,13 @@ export default function AllTemplates() {
                       orgLogo={organizations.find(o => o.name === sub.school_name)?.logo_url || null}
                       onDownload={() => downloadCard(sub)}
                       onDelete={() => setDeleteId(sub.id)}
+                      onEdit={() => {
+                        if (customTemplate) {
+                          navigate(`/card-builder?edit=${customTemplate.id}&sub=${sub.id}`)
+                        } else {
+                          navigate(`/card-builder?sub=${sub.id}`)
+                        }
+                      }}
                       cardRefs={cardRefs}
                     />
                   ))}
@@ -1272,6 +1483,13 @@ export default function AllTemplates() {
                     orgLogo={organizations.find(o => o.name === sub.school_name)?.logo_url || null}
                     onDownload={() => downloadCard(sub)}
                     onDelete={() => setDeleteId(sub.id)}
+                    onEdit={() => {
+                      if (customTemplate) {
+                        navigate(`/card-builder?edit=${customTemplate.id}&sub=${sub.id}`)
+                      } else {
+                        navigate(`/card-builder?sub=${sub.id}`)
+                      }
+                    }}
                     cardRefs={cardRefs}
                   />
                 ))}
@@ -1359,6 +1577,22 @@ export default function AllTemplates() {
           done={zipProgress.done}
           total={zipProgress.total}
           label={zipProgress.label}
+        />
+      )}
+
+      {/* ── Edit card details modal ── */}
+      {editingSubmission && (
+        <EditCardModal
+          submission={editingSubmission}
+          onSave={async (updatedFields) => {
+            const success = await updateSubmission(editingSubmission.id, updatedFields)
+            if (success) {
+              // Immediately update local display list
+              setDisplayCards(prev => prev.map(s => s.id === editingSubmission.id ? { ...s, ...updatedFields } : s))
+              setEditingSubmission(null)
+            }
+          }}
+          onClose={() => setEditingSubmission(null)}
         />
       )}
 

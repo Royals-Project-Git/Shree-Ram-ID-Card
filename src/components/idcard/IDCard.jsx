@@ -92,7 +92,7 @@ function QRCanvas({ text, size }) {
 ══════════════════════════════════════════════════════════════ */
 const IDCard = forwardRef(function IDCard(
   { submission, templateId = 'T1', customConfig = null, orgLogo = null,
-    showActions = true, onDelete, onDownload },
+    showActions = true, onDelete, onDownload, onEdit },
   ref
 ) {
   const sub = submission || {}
@@ -262,6 +262,8 @@ const IDCard = forwardRef(function IDCard(
               )
             }
 
+            const labelW = c.labelWidth || 72
+
             return (
               <div key={f.key} style={{
                 position:'absolute', left:pos.x, top:pos.y,
@@ -269,8 +271,8 @@ const IDCard = forwardRef(function IDCard(
                 padding:'2px 6px', zIndex:8,
                 display:'flex', alignItems:'baseline', gap:0,
               }}>
-                {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', whiteSpace:'nowrap' }}>{f.label}</span>}
-                {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0 }}>{' : '}</span>}
+                {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', whiteSpace:'nowrap', display:'inline-block', minWidth:labelW }}>{f.label}</span>}
+                {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0 }}>:</span>}
                 <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
                   textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
                   wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
@@ -488,6 +490,16 @@ const IDCard = forwardRef(function IDCard(
         {/* Action buttons */}
         {showActions && (
           <div style={{ display:'flex', gap:8, marginTop:10 }}>
+            {onEdit && (
+              <button onClick={onEdit}
+                style={{ flex:1, padding:'8px', borderRadius:8, background:'#e8ecff',
+                  color:'#2352ff', border:'none', fontSize:12, fontWeight:700, cursor:'pointer',
+                  transition: 'background .15s, color .15s' }}
+                onMouseEnter={e=>e.target.style.background='#2352ff1a'}
+                onMouseLeave={e=>e.target.style.background='#e8ecff'}>
+                ✏️ Edit
+              </button>
+            )}
             <button onClick={onDownload}
               style={{ flex:1, padding:'8px', borderRadius:8, background:'#e0faf2',
                 color:'#00875f', border:'none', fontSize:12, fontWeight:700, cursor:'pointer' }}
@@ -606,6 +618,16 @@ const IDCard = forwardRef(function IDCard(
       {/* Action buttons */}
       {showActions && (
         <div style={{ display:'flex', gap:8, marginTop:10 }}>
+          {onEdit && (
+            <button onClick={onEdit}
+              style={{ flex:1, padding:'8px', borderRadius:8, background:'#e8ecff',
+                color:'#2352ff', border:'none', fontSize:12, fontWeight:700, cursor:'pointer',
+                transition: 'background .15s, color .15s' }}
+              onMouseEnter={e=>e.target.style.background='#2352ff1a'}
+              onMouseLeave={e=>e.target.style.background='#e8ecff'}>
+              ✏️ Edit
+            </button>
+          )}
           <button onClick={onDownload}
             style={{ flex:1, padding:'8px', borderRadius:8, background:'#e0faf2',
               color:'#00875f', border:'none', fontSize:12, fontWeight:700, cursor:'pointer' }}
