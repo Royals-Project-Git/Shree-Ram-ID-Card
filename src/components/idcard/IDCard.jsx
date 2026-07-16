@@ -241,17 +241,21 @@ const IDCard = forwardRef(function IDCard(
             const brad      = fs.borderRadius ?? 4
             const fontFam   = fs.fontFamily  || c.globalFontFamily || 'Instrument Sans,sans-serif'
             const displayVal = uppercase ? (val||'').toUpperCase() : val
+            const fieldMaxW  = CW - pos.x - 8
 
             if (highlight) {
               return (
                 <div key={f.key} style={{
                   position:'absolute', left:pos.x, top:pos.y, zIndex:8,
+                  maxWidth: fieldMaxW,
                   background: bgColor, borderRadius: brad,
                   padding:'3px 8px', display:'inline-block',
                 }}>
                   <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
-                    whiteSpace:'nowrap', letterSpacing:uppercase?1.5:0.2,
-                    textTransform:uppercase?'uppercase':'none', display:'block', fontFamily:fontFam }}>
+                    letterSpacing:uppercase?1.5:0.2,
+                    textTransform:uppercase?'uppercase':'none', display:'block', fontFamily:fontFam,
+                    wordBreak:'break-word', overflowWrap:'break-word',
+                  }}>
                     {displayVal}
                   </span>
                 </div>
@@ -261,13 +265,16 @@ const IDCard = forwardRef(function IDCard(
             return (
               <div key={f.key} style={{
                 position:'absolute', left:pos.x, top:pos.y,
+                maxWidth: fieldMaxW,
                 padding:'2px 6px', zIndex:8,
                 display:'flex', alignItems:'baseline', gap:0,
               }}>
                 {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', whiteSpace:'nowrap' }}>{f.label}</span>}
                 {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0 }}>{' : '}</span>}
-                <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor, whiteSpace:'nowrap',
-                  textTransform:uppercase?'uppercase':'none', fontFamily:fontFam }}>{displayVal}</span>
+                <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
+                  textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
+                  wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
+                }}>{displayVal}</span>
               </div>
             )
           })}
@@ -294,22 +301,60 @@ const IDCard = forwardRef(function IDCard(
             const startX  = c.flowStartX ?? autoStartX
             const availW  = CW - startX - 12
 
-            // Full-width fields: name first, address last; everything else paired in 2 cols
-            const FULL_WIDTH_KEYS = ['name', 'address']
             const present = visibleFields.filter(f => sub[f.key])
-            const fullWidthFirst = present.filter(f => f.key === 'name')
-            const fullWidthLast  = present.filter(f => f.key === 'address')
-            const paired         = present.filter(f => !FULL_WIDTH_KEYS.includes(f.key))
 
             // Build layout rows: each row = { fields: [...], isFullWidth: bool }
             const rows = []
-            fullWidthFirst.forEach(f => rows.push({ fields: [f], isFullWidth: true }))
-            for (let i = 0; i < paired.length; i += 2) {
-              const row = [paired[i]]
-              if (paired[i + 1]) row.push(paired[i + 1])
-              rows.push({ fields: row, isFullWidth: false })
-            }
-            fullWidthLast.forEach(f => rows.push({ fields: [f], isFullWidth: true }))
+            const processed = new Set()
+
+            present.forEach((f) => {
+              if (processed.has(f.key)) return
+
+              if (f.key === 'class') {
+                const sectionField = present.find(pf => pf.key === 'section')
+                if (sectionField) {
+                  rows.push({ fields: [f, sectionField], isFullWidth: false })
+                  processed.add('class')
+                  processed.add('section')
+                } else {
+                  rows.push({ fields: [f], isFullWidth: true })
+                  processed.add('class')
+                }
+              } else if (f.key === 'section') {
+                const classField = present.find(pf => pf.key === 'class')
+                if (classField) {
+                  rows.push({ fields: [classField, f], isFullWidth: false })
+                  processed.add('class')
+                  processed.add('section')
+                } else {
+                  rows.push({ fields: [f], isFullWidth: true })
+                  processed.add('section')
+                }
+              } else if (f.key === 'blood_group') {
+                const admField = present.find(pf => pf.key === 'admission_number')
+                if (admField) {
+                  rows.push({ fields: [f, admField], isFullWidth: false })
+                  processed.add('blood_group')
+                  processed.add('admission_number')
+                } else {
+                  rows.push({ fields: [f], isFullWidth: true })
+                  processed.add('blood_group')
+                }
+              } else if (f.key === 'admission_number') {
+                const bgField = present.find(pf => pf.key === 'blood_group')
+                if (bgField) {
+                  rows.push({ fields: [bgField, f], isFullWidth: false })
+                  processed.add('blood_group')
+                  processed.add('admission_number')
+                } else {
+                  rows.push({ fields: [f], isFullWidth: true })
+                  processed.add('admission_number')
+                }
+              } else {
+                rows.push({ fields: [f], isFullWidth: true })
+                processed.add(f.key)
+              }
+            })
 
             const elements = []
             let currentY = startY
@@ -345,7 +390,8 @@ const IDCard = forwardRef(function IDCard(
                       <span style={{
                         fontSize: ffSize, fontWeight: ffWeight, color: textColor,
                         letterSpacing: uppercase ? 1.5 : 0.2, textTransform: uppercase ? 'uppercase' : 'none',
-                        flex: 1, textAlign: align === 'center' ? 'center' : align === 'right' ? 'right' : 'left',
+                        flex: 1, minWidth: 0, wordBreak: 'break-word', overflowWrap: 'break-word',
+                        textAlign: align === 'center' ? 'center' : align === 'right' ? 'right' : 'left',
                         fontFamily: fontFam,
                       }}>{displayVal}</span>
                     </div>
@@ -365,7 +411,7 @@ const IDCard = forwardRef(function IDCard(
                       {showLabel && <span style={{ fontSize: lSize, fontWeight: 700, color: '#555', margin: '0 4px 0 0', flexShrink: 0 }}>:</span>}
                       <span style={{
                         fontSize: ffSize, fontWeight: ffWeight, color: textColor,
-                        flex: 1, wordBreak: 'break-word', lineHeight: 1.3,
+                        flex: 1, minWidth: 0, wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: 1.3,
                         textAlign: align === 'right' ? 'right' : 'left',
                         textTransform: uppercase ? 'uppercase' : 'none',
                         fontFamily: fontFam,
@@ -374,7 +420,16 @@ const IDCard = forwardRef(function IDCard(
                   )
                 }
               })
-              currentY += rowGap
+              // Dynamic row height: estimate lines of text to avoid overlap on wrapped content
+              const textW = row.isFullWidth ? availW - lw - 20 : Math.floor((availW - 4) / 2) - Math.min(lw, Math.floor(Math.floor((availW - 4) / 2) * 0.45)) - 20
+              const charsPerLine = Math.max(1, Math.floor(textW / (fSize * 0.55)))
+              let maxLines = 1
+              row.fields.forEach(f => {
+                const val = sub[f.key] || ''
+                const lines = Math.ceil(val.length / charsPerLine)
+                if (lines > maxLines) maxLines = lines
+              })
+              currentY += maxLines > 1 ? Math.max(rowGap, maxLines * fSize * 1.3 + 4) : rowGap
             })
 
             return elements
@@ -509,57 +564,24 @@ const IDCard = forwardRef(function IDCard(
             </div>
           </div>
 
-          <div style={{ display:'flex', flexDirection:'column', gap:7,
+          <div style={{ display:'flex', flexDirection:'column', gap:5,
             paddingTop:10, borderTop:'1px solid #f0f0f0' }}>
-            {/* Full Name — full width first line */}
-            {sub.name && (
-              <div style={{ display:'flex', alignItems:'baseline', gap:0, marginBottom:1 }}>
-                <span style={{ fontSize:10, fontWeight:700, color:'#555', whiteSpace:'nowrap', minWidth:58 }}>Full Name</span>
-                <span style={{ fontSize:10, fontWeight:700, color:'#555', margin:'0 4px', flexShrink:0 }}>{':'}</span>
-                <span style={{ fontSize:11, fontWeight:700, color:t.c1 }}>{sub.name}</span>
+            {[
+              ['Date of Birth', formatDOB(sub.date_of_birth)],
+              ['Blood Group',   sub.blood_group],
+              ['Contact',       sub.contact_number],
+              ['Emergency',     sub.emergency_contact],
+              ['Department',    sub.department],
+              ['Transport',     sub.mode_of_transport],
+              ['Employee ID',   sub.employee_id],
+              ['Address',       sub.address],
+            ].map(([label, value]) => value ? (
+              <div key={label} style={{ display:'flex', alignItems:'baseline', gap:0 }}>
+                <span style={{ fontSize:10, fontWeight:700, color:'#555', whiteSpace:'nowrap', minWidth:72, flexShrink:0 }}>{label}</span>
+                <span style={{ fontSize:10, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0 }}>{' : '}</span>
+                <span style={{ fontSize:11, fontWeight:600, color:'#1a1a2e', minWidth:0, wordBreak:'break-word', overflowWrap:'break-word', lineHeight:1.3 }}>{value}</span>
               </div>
-            )}
-            {/* Paired fields in 2-column grid */}
-            {(() => {
-              const pairs = [
-                [['Class',       sub.class],            ['Section',     sub.section]],
-                [['Adm No.',     sub.admission_number], ['Blood Grp',   sub.blood_group]],
-                [['D.O.B.',      formatDOB(sub.date_of_birth)], ['Contact No.', sub.contact_number]],
-                [['Emergency',   sub.emergency_contact],['Roll No.',    sub.roll_number]],
-                [['Designation', sub.designation],      ['Department',  sub.department]],
-                [['Transport',   sub.mode_of_transport],['Employee ID', sub.employee_id]],
-              ]
-              return pairs.map(([left, right], pIdx) => {
-                const lHas = left[1], rHas = right[1]
-                if (!lHas && !rHas) return null
-                return (
-                  <div key={pIdx} style={{ display:'flex', gap:8 }}>
-                    {lHas ? (
-                      <div style={{ flex:1, display:'flex', alignItems:'baseline', gap:0, minWidth:0 }}>
-                        <span style={{ fontSize:10, fontWeight:700, color:'#555', whiteSpace:'nowrap', minWidth:48, flexShrink:0 }}>{left[0]}</span>
-                        <span style={{ fontSize:10, fontWeight:700, color:'#555', margin:'0 4px', flexShrink:0 }}>{':'}</span>
-                        <span style={{ fontSize:10, fontWeight:600, color:'#1a1a2e', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{left[1]}</span>
-                      </div>
-                    ) : <div style={{ flex:1 }}/>}
-                    {rHas ? (
-                      <div style={{ flex:1, display:'flex', alignItems:'baseline', gap:0, minWidth:0 }}>
-                        <span style={{ fontSize:10, fontWeight:700, color:'#555', whiteSpace:'nowrap', minWidth:48, flexShrink:0 }}>{right[0]}</span>
-                        <span style={{ fontSize:10, fontWeight:700, color:'#555', margin:'0 4px', flexShrink:0 }}>{':'}</span>
-                        <span style={{ fontSize:10, fontWeight:600, color:'#1a1a2e', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{right[1]}</span>
-                      </div>
-                    ) : <div style={{ flex:1 }}/>}
-                  </div>
-                )
-              })
-            })()}
-            {/* Address — full width last line */}
-            {sub.address && (
-              <div style={{ display:'flex', alignItems:'baseline', gap:0, marginTop:1 }}>
-                <span style={{ fontSize:10, fontWeight:700, color:'#555', whiteSpace:'nowrap', minWidth:58, flexShrink:0 }}>Address</span>
-                <span style={{ fontSize:10, fontWeight:700, color:'#555', margin:'0 4px', flexShrink:0 }}>{':'}</span>
-                <span style={{ fontSize:10, fontWeight:600, color:'#1a1a2e', lineHeight:1.4 }}>{sub.address}</span>
-              </div>
-            )}
+            ) : null)}
           </div>
         </div>
 

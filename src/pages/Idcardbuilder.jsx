@@ -388,18 +388,23 @@ function DragField({ f, config, val, isSel, isMul, onMouseDown, onClick }) {
   const fontFam   = fs.fontFamily  || config.globalFontFamily || 'Instrument Sans'
   const padX      = 7
   const padY      = 3
+  const CW = config.cardW || 340
+  const fieldMaxW = CW - pos.x - 8
   const displayVal = uppercase ? (val||'').toUpperCase() : val
 
   if (highlight) {
     return (
       <div key={f.key} onMouseDown={onMouseDown} onClick={onClick}
         style={{ position:'absolute', left:pos.x, top:pos.y, zIndex:isSel?60:10,
+          maxWidth: fieldMaxW,
           background:bgColor, borderRadius:brad, padding:`${padY}px ${padX}px`, minWidth:80,
           border: isSel?`2px dashed rgba(255,255,255,.7)`:isMul?'2px dashed #f59e0b':'2px dashed transparent',
           cursor:'grab', boxShadow:isSel?`0 0 0 3px ${c1}55`:'none', transition:'border .15s' }}>
         <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
-          whiteSpace:'nowrap', letterSpacing:uppercase?1.5:0.2,
-          textTransform:uppercase?'uppercase':'none', display:'block', fontFamily:fontFam }}>
+          letterSpacing:uppercase?1.5:0.2,
+          textTransform:uppercase?'uppercase':'none', display:'block', fontFamily:fontFam,
+          wordBreak:'break-word', overflowWrap:'break-word',
+        }}>
           {displayVal}
         </span>
         {isSel && (
@@ -414,15 +419,18 @@ function DragField({ f, config, val, isSel, isMul, onMouseDown, onClick }) {
   return (
     <div key={f.key} onMouseDown={onMouseDown} onClick={onClick}
       style={{ position:'absolute', left:pos.x, top:pos.y, zIndex:isSel?60:10,
+        maxWidth: fieldMaxW,
         padding:`${padY}px ${padX}px`, borderRadius:5, minWidth:55,
         border: isSel?`1.5px dashed ${c1}`:isMul?'1.5px dashed #f59e0b':'1.5px dashed transparent',
         background: isSel?`${c1}11`:isMul?'#fef3c722':'transparent',
         cursor:'grab', transition:'border .15s, background .15s' }}>
       <div style={{ display:'flex', alignItems:'baseline', gap:0 }}>
         {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', whiteSpace:'nowrap' }}>{f.label}</span>}
-        {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px' }}>{' : '}</span>}
-        <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor, whiteSpace:'nowrap',
-          textTransform:uppercase?'uppercase':'none', fontFamily:fontFam }}>{displayVal}</span>
+        {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0 }}>{' : '}</span>}
+        <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
+          textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
+          wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
+        }}>{displayVal}</span>
       </div>
       {isSel && (
         <div style={{ position:'absolute', top:-16, left:0, fontSize:9, color:c1, fontWeight:700,
@@ -608,21 +616,60 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
         const startX   = config.flowStartX ?? autoStartX
         const availW   = CW - startX - 12
 
-        // Full-width fields: name first, address last; everything else paired in 2 cols
-        const FULL_WIDTH_KEYS = ['name', 'address']
         const present = visibleFields
-        const fullWidthFirst = present.filter(f => f.key === 'name')
-        const fullWidthLast  = present.filter(f => f.key === 'address')
-        const paired         = present.filter(f => !FULL_WIDTH_KEYS.includes(f.key))
 
+        // Build layout rows: each row = { fields: [...], isFullWidth: bool }
         const rows = []
-        fullWidthFirst.forEach(f => rows.push({ fields: [f], isFullWidth: true }))
-        for (let i = 0; i < paired.length; i += 2) {
-          const row = [paired[i]]
-          if (paired[i + 1]) row.push(paired[i + 1])
-          rows.push({ fields: row, isFullWidth: false })
-        }
-        fullWidthLast.forEach(f => rows.push({ fields: [f], isFullWidth: true }))
+        const processed = new Set()
+
+        present.forEach((f) => {
+          if (processed.has(f.key)) return
+
+          if (f.key === 'class') {
+            const sectionField = present.find(pf => pf.key === 'section')
+            if (sectionField) {
+              rows.push({ fields: [f, sectionField], isFullWidth: false })
+              processed.add('class')
+              processed.add('section')
+            } else {
+              rows.push({ fields: [f], isFullWidth: true })
+              processed.add('class')
+            }
+          } else if (f.key === 'section') {
+            const classField = present.find(pf => pf.key === 'class')
+            if (classField) {
+              rows.push({ fields: [classField, f], isFullWidth: false })
+              processed.add('class')
+              processed.add('section')
+            } else {
+              rows.push({ fields: [f], isFullWidth: true })
+              processed.add('section')
+            }
+          } else if (f.key === 'blood_group') {
+            const admField = present.find(pf => pf.key === 'admission_number')
+            if (admField) {
+              rows.push({ fields: [f, admField], isFullWidth: false })
+              processed.add('blood_group')
+              processed.add('admission_number')
+            } else {
+              rows.push({ fields: [f], isFullWidth: true })
+              processed.add('blood_group')
+            }
+          } else if (f.key === 'admission_number') {
+            const bgField = present.find(pf => pf.key === 'blood_group')
+            if (bgField) {
+              rows.push({ fields: [bgField, f], isFullWidth: false })
+              processed.add('blood_group')
+              processed.add('admission_number')
+            } else {
+              rows.push({ fields: [f], isFullWidth: true })
+              processed.add('admission_number')
+            }
+          } else {
+            rows.push({ fields: [f], isFullWidth: true })
+            processed.add(f.key)
+          }
+        })
 
         const elements = []
         let currentY = startY
@@ -662,7 +709,8 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                   <span style={{
                     fontSize: ffSize, fontWeight: ffWeight, color: textColor,
                     letterSpacing: uppercase ? 1.5 : 0.2, textTransform: uppercase ? 'uppercase' : 'none',
-                    flex: 1, textAlign: align === 'center' ? 'center' : align === 'right' ? 'right' : 'left',
+                    flex: 1, minWidth: 0, wordBreak: 'break-word', overflowWrap: 'break-word',
+                    textAlign: align === 'center' ? 'center' : align === 'right' ? 'right' : 'left',
                     fontFamily: fontFam,
                   }}>{displayVal}</span>
                 </div>
@@ -687,7 +735,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                   {showLabel && <span style={{ fontSize: lSize, fontWeight: 700, color: '#555', margin: '0 4px 0 0', flexShrink: 0 }}>:</span>}
                   <span style={{
                     fontSize: ffSize, fontWeight: ffWeight, color: textColor,
-                    flex: 1, wordBreak: 'break-word', lineHeight: 1.3,
+                    flex: 1, minWidth: 0, wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: 1.3,
                     textAlign: align === 'right' ? 'right' : 'left',
                     textTransform: uppercase ? 'uppercase' : 'none',
                     fontFamily: fontFam,
@@ -696,7 +744,16 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
               )
             }
           })
-          currentY += rowGap
+          // Dynamic row height: estimate lines of text to avoid overlap on wrapped content
+          const textW = row.isFullWidth ? availW - lw - 20 : Math.floor((availW - 4) / 2) - Math.min(lw, Math.floor(Math.floor((availW - 4) / 2) * 0.45)) - 20
+          const charsPerLine = Math.max(1, Math.floor(textW / (fSize * 0.55)))
+          let maxLines = 1
+          row.fields.forEach(f => {
+            const val = sub?.[f.key] || `[${f.label}]`
+            const lines = Math.ceil(val.length / charsPerLine)
+            if (lines > maxLines) maxLines = lines
+          })
+          currentY += maxLines > 1 ? Math.max(rowGap, maxLines * fSize * 1.3 + 4) : rowGap
         })
 
         return elements
@@ -961,6 +1018,12 @@ export default function IDCardBuilder() {
   const [fsFontDraft,    setFsFontDraft]    = useState(null)
   const [cardWDraft,     setCardWDraft]     = useState(null)
   const [cardHDraft,     setCardHDraft]     = useState(null)
+  const [bgOpacityDraft, setBgOpacityDraft] = useState(null)
+  const [labelWidthDraft, setLabelWidthDraft] = useState(null)
+  const [rowGapDraft,    setRowGapDraft]    = useState(null)
+  const [flowStartYDraft, setFlowStartYDraft] = useState(null)
+  const [flowStartXDraft, setFlowStartXDraft] = useState(null)
+  const [qrSizeDraft,    setQrSizeDraft]    = useState(null)
 
   useEffect(() => { setFsFontDraft(null) }, [selected])  // reset per-field draft when switching fields
   const bgInputRef    = useRef(null)
@@ -1004,7 +1067,25 @@ export default function IDCardBuilder() {
       const on = p.visibleFields.includes(key)
       if (on) return { ...p, visibleFields: p.visibleFields.filter(k=>k!==key) }
       const nextVisible = [...p.visibleFields, key]
-      return { ...p, visibleFields: nextVisible, fieldPositions: reflowFieldPositions(nextVisible, p) }
+      // Only assign a position for the NEW field — leave all existing positions untouched
+      const existingPositions = { ...(p.fieldPositions || {}) }
+      if (!existingPositions[key]) {
+        // Place the new field below the last existing field, or use DEFAULT_FIELD_POSITIONS
+        const defaultPos = DEFAULT_FIELD_POSITIONS[key]
+        if (defaultPos) {
+          existingPositions[key] = defaultPos
+        } else {
+          // Compute a sensible Y from current visible fields
+          const FIELD_STACK_GAP = 30
+          let maxY = 100
+          p.visibleFields.forEach(k => {
+            const pos = existingPositions[k] || DEFAULT_FIELD_POSITIONS[k] || { x:110, y:100 }
+            if (pos.y > maxY) maxY = pos.y
+          })
+          existingPositions[key] = { x: 110, y: maxY + FIELD_STACK_GAP }
+        }
+      }
+      return { ...p, visibleFields: nextVisible, fieldPositions: existingPositions }
     })
     if (!config.visibleFields.includes(key)) setSelected(key)
   }
@@ -1712,11 +1793,27 @@ export default function IDCardBuilder() {
                       style={{ position:'absolute', top:4, right:4, width:22, height:22, borderRadius:'50%', border:'none', background:'rgba(0,0,0,.6)', color:'#fff', cursor:'pointer', fontSize:12, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
                   </div>
                   <div style={{ marginBottom:8 }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
                       <span style={{ fontSize:11, color:'var(--ink3)' }}>Opacity</span>
-                      <span style={{ fontSize:11, fontFamily:'JetBrains Mono,monospace', color:'var(--blue)', fontWeight:700 }}>{Math.round((config.bgOpacity||0.15)*100)}%</span>
+                      <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                        <input type="text" inputMode="numeric" pattern="[0-9]*"
+                          value={bgOpacityDraft ?? String(Math.round((config.bgOpacity||0.15)*100))}
+                          onChange={e => {
+                            const raw = e.target.value.replace(/[^0-9]/g, '')
+                            setBgOpacityDraft(raw)
+                            if (raw !== '') upd('bgOpacity', Number(raw)/100)
+                          }}
+                          onBlur={e => {
+                            const clamped = Math.min(100, Math.max(5, Number(e.target.value)||15))
+                            upd('bgOpacity', clamped/100)
+                            setBgOpacityDraft(null)
+                          }}
+                          onKeyDown={e => { if (e.key==='Enter') e.target.blur() }}
+                          style={{ width:40, padding:'2px 6px', borderRadius:5, border:'1px solid var(--border)', fontSize:11, fontFamily:'JetBrains Mono,monospace', color:'var(--blue)', fontWeight:700, textAlign:'right', outline:'none' }}/>
+                        <span style={{ fontSize:10, color:'var(--ink3)' }}>%</span>
+                      </div>
                     </div>
-                    <input type="range" min={5} max={100} step={5} value={Math.round((config.bgOpacity||0.15)*100)} onChange={e=>upd('bgOpacity',Number(e.target.value)/100)} style={{ width:'100%', accentColor:'#2352ff' }}/>
+                    <input type="range" min={5} max={100} step={1} value={Math.round((config.bgOpacity||0.15)*100)} onChange={e=>{ upd('bgOpacity',Number(e.target.value)/100); setBgOpacityDraft(null) }} style={{ width:'100%', accentColor:'#2352ff' }}/>
                   </div>
                   <div style={{ fontSize:10, color:'var(--ink3)', marginBottom:5, fontWeight:600 }}>Fit</div>
                   <div style={{ display:'flex', gap:6 }}>
@@ -1792,57 +1889,98 @@ export default function IDCardBuilder() {
 
                   {/* Label Column Width */}
                   <div>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
                       <span style={{ fontSize:11, color:'var(--ink3)', fontWeight:600 }}>Label Column Width</span>
-                      <span style={{ fontSize:11, fontFamily:'JetBrains Mono,monospace', color:'var(--blue)', fontWeight:700, background:'var(--blue-s)', borderRadius:5, padding:'1px 6px' }}>{config.labelWidth||72}px</span>
+                      <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                        <input type="text" inputMode="numeric" pattern="[0-9]*"
+                          value={labelWidthDraft ?? String(config.labelWidth||72)}
+                          onChange={e => {
+                            const raw = e.target.value.replace(/[^0-9]/g, '')
+                            setLabelWidthDraft(raw)
+                            if (raw !== '') upd('labelWidth', Number(raw))
+                          }}
+                          onBlur={e => {
+                            const clamped = Math.min(250, Math.max(20, Number(e.target.value)||72))
+                            upd('labelWidth', clamped)
+                            setLabelWidthDraft(null)
+                          }}
+                          onKeyDown={e => { if (e.key==='Enter') e.target.blur() }}
+                          style={{ width:40, padding:'2px 6px', borderRadius:5, border:'1px solid var(--border)', fontSize:11, fontFamily:'JetBrains Mono,monospace', color:'var(--blue)', fontWeight:700, textAlign:'right', outline:'none' }}/>
+                        <span style={{ fontSize:10, color:'var(--ink3)' }}>px</span>
+                      </div>
                     </div>
-                    <input type="range" min={40} max={140} step={4}
+                    <input type="range" min={20} max={250} step={1}
                       value={config.labelWidth||72}
-                      onChange={e => upd('labelWidth', Number(e.target.value))}
+                      onChange={e => { upd('labelWidth', Number(e.target.value)); setLabelWidthDraft(null) }}
                       style={{ width:'100%', accentColor:'#2352ff' }}/>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginTop:2 }}>
-                      <span style={{ fontSize:9, color:'var(--ink3)' }}>40px · Narrow</span>
-                      <span style={{ fontSize:9, color:'var(--ink3)' }}>140px · Wide</span>
-                    </div>
                   </div>
 
-                  {/* Row Gap */}
+                  {/* Row Spacing */}
                   <div>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
                       <span style={{ fontSize:11, color:'var(--ink3)', fontWeight:600 }}>Row Spacing</span>
-                      <span style={{ fontSize:11, fontFamily:'JetBrains Mono,monospace', color:'var(--blue)', fontWeight:700, background:'var(--blue-s)', borderRadius:5, padding:'1px 6px' }}>{config.rowGap||22}px</span>
+                      <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                        <input type="text" inputMode="numeric" pattern="[0-9]*"
+                          value={rowGapDraft ?? String(config.rowGap||22)}
+                          onChange={e => {
+                            const raw = e.target.value.replace(/[^0-9]/g, '')
+                            setRowGapDraft(raw)
+                            if (raw !== '') upd('rowGap', Number(raw))
+                          }}
+                          onBlur={e => {
+                            const clamped = Math.min(80, Math.max(5, Number(e.target.value)||22))
+                            upd('rowGap', clamped)
+                            setRowGapDraft(null)
+                          }}
+                          onKeyDown={e => { if (e.key==='Enter') e.target.blur() }}
+                          style={{ width:40, padding:'2px 6px', borderRadius:5, border:'1px solid var(--border)', fontSize:11, fontFamily:'JetBrains Mono,monospace', color:'var(--blue)', fontWeight:700, textAlign:'right', outline:'none' }}/>
+                        <span style={{ fontSize:10, color:'var(--ink3)' }}>px</span>
+                      </div>
                     </div>
-                    <input type="range" min={14} max={40} step={2}
+                    <input type="range" min={5} max={80} step={1}
                       value={config.rowGap||22}
-                      onChange={e => upd('rowGap', Number(e.target.value))}
+                      onChange={e => { upd('rowGap', Number(e.target.value)); setRowGapDraft(null) }}
                       style={{ width:'100%', accentColor:'#2352ff' }}/>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginTop:2 }}>
-                      <span style={{ fontSize:9, color:'var(--ink3)' }}>Compact</span>
-                      <span style={{ fontSize:9, color:'var(--ink3)' }}>Spacious</span>
-                    </div>
                   </div>
 
                   {/* Fields Start Y (manual override) */}
                   <div>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
                       <span style={{ fontSize:11, color:'var(--ink3)', fontWeight:600 }}>Fields Start Y</span>
-                      <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                      <div style={{ display:'flex', gap:4, alignItems:'center' }}>
                         {config.flowStartY !== null && config.flowStartY !== undefined && (
                           <button onClick={() => upd('flowStartY', null)}
                             style={{ fontSize:9, padding:'1px 6px', borderRadius:5, border:'1px solid var(--border)', background:'var(--red-s)', color:'var(--red)', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>Auto</button>
                         )}
-                        <span style={{ fontSize:11, fontFamily:'JetBrains Mono,monospace', color:'var(--blue)', fontWeight:700, background:'var(--blue-s)', borderRadius:5, padding:'1px 6px' }}>
-                          {config.flowStartY ?? 'auto'}px
-                        </span>
+                        <input type="text" inputMode="numeric" pattern="[0-9]*"
+                          value={flowStartYDraft ?? (config.flowStartY !== null && config.flowStartY !== undefined ? String(config.flowStartY) : '')}
+                          placeholder="auto"
+                          onChange={e => {
+                            const raw = e.target.value.replace(/[^0-9]/g, '')
+                            setFlowStartYDraft(raw)
+                            if (raw !== '') upd('flowStartY', Number(raw))
+                          }}
+                          onBlur={e => {
+                            if (e.target.value === '') {
+                              upd('flowStartY', null)
+                            } else {
+                              const clamped = Math.min(config.cardH||480, Math.max(0, Number(e.target.value)||0))
+                              upd('flowStartY', clamped)
+                            }
+                            setFlowStartYDraft(null)
+                          }}
+                          onKeyDown={e => { if (e.key==='Enter') e.target.blur() }}
+                          style={{ width:40, padding:'2px 6px', borderRadius:5, border:'1px solid var(--border)', fontSize:11, fontFamily:'JetBrains Mono,monospace', color:'var(--blue)', fontWeight:700, textAlign:'right', outline:'none' }}/>
+                        <span style={{ fontSize:10, color:'var(--ink3)' }}>px</span>
                       </div>
                     </div>
-                    <input type="range" min={60} max={config.cardH||480 - 80} step={4}
+                    <input type="range" min={0} max={config.cardH||480} step={1}
                       value={config.flowStartY ?? (() => {
                         const headerH = config.showHeader !== false ? (config.orientation==='landscape' ? 64 : 80) : 0
                         const ph = Math.round((config.photoSize||72)*4/3)
                         return Math.max(headerH + 8, (config.photoY??90) + ph + 10)
                       })()}
-                      onChange={e => upd('flowStartY', Number(e.target.value))}
+                      onChange={e => { upd('flowStartY', Number(e.target.value)); setFlowStartYDraft(null) }}
                       style={{ width:'100%', accentColor:'#2352ff' }}/>
                     <div style={{ fontSize:9, color:'var(--ink3)', marginTop:2 }}>
                       Push "Auto" to reset back to automatic position
@@ -1851,28 +1989,45 @@ export default function IDCardBuilder() {
 
                   {/* Fields Start X (manual override) */}
                   <div>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
                       <span style={{ fontSize:11, color:'var(--ink3)', fontWeight:600 }}>Fields Start X</span>
-                      <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                      <div style={{ display:'flex', gap:4, alignItems:'center' }}>
                         {config.flowStartX !== null && config.flowStartX !== undefined && (
                           <button onClick={() => upd('flowStartX', null)}
                             style={{ fontSize:9, padding:'1px 6px', borderRadius:5, border:'1px solid var(--border)', background:'var(--red-s)', color:'var(--red)', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>Auto</button>
                         )}
-                        <span style={{ fontSize:11, fontFamily:'JetBrains Mono,monospace', color:'var(--blue)', fontWeight:700, background:'var(--blue-s)', borderRadius:5, padding:'1px 6px' }}>
-                          {config.flowStartX ?? 'auto'}px
-                        </span>
+                        <input type="text" inputMode="numeric" pattern="[0-9]*"
+                          value={flowStartXDraft ?? (config.flowStartX !== null && config.flowStartX !== undefined ? String(config.flowStartX) : '')}
+                          placeholder="auto"
+                          onChange={e => {
+                            const raw = e.target.value.replace(/[^0-9]/g, '')
+                            setFlowStartXDraft(raw)
+                            if (raw !== '') upd('flowStartX', Number(raw))
+                          }}
+                          onBlur={e => {
+                            if (e.target.value === '') {
+                              upd('flowStartX', null)
+                            } else {
+                              const clamped = Math.min(config.cardW||340, Math.max(0, Number(e.target.value)||0))
+                              upd('flowStartX', clamped)
+                            }
+                            setFlowStartXDraft(null)
+                          }}
+                          onKeyDown={e => { if (e.key==='Enter') e.target.blur() }}
+                          style={{ width:40, padding:'2px 6px', borderRadius:5, border:'1px solid var(--border)', fontSize:11, fontFamily:'JetBrains Mono,monospace', color:'var(--blue)', fontWeight:700, textAlign:'right', outline:'none' }}/>
+                        <span style={{ fontSize:10, color:'var(--ink3)' }}>px</span>
                       </div>
                     </div>
-                    <input type="range" min={8} max={(config.cardW||340) - 100} step={4}
+                    <input type="range" min={0} max={config.cardW||340} step={1}
                       value={config.flowStartX ?? (() => {
                         const pw = config.photoSize||72
                         const photoRight = (config.photoX??16) + pw + 10
                         return photoRight < (config.cardW||340) * 0.55 ? photoRight : 12
                       })()}
-                      onChange={e => upd('flowStartX', Number(e.target.value))}
+                      onChange={e => { upd('flowStartX', Number(e.target.value)); setFlowStartXDraft(null) }}
                       style={{ width:'100%', accentColor:'#2352ff' }}/>
-                    <div style={{ fontSize:9, color:'var(--ink3)', marginTop:2 }}>
-                      Auto positions fields to the right of the photo
+                    <div style={{ display:'flex', justifyContent:'space-between', marginTop:2 }}>
+                      <span style={{ fontSize:9, color:'var(--ink3)' }}>Auto positions fields to the right of the photo</span>
                     </div>
                   </div>
 
@@ -1989,17 +2144,33 @@ export default function IDCardBuilder() {
                   )}
 
                   <div>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
                       <span style={{ fontSize:11, color:'var(--ink3)', fontWeight:600 }}>QR Size</span>
-                      <span style={{ fontSize:11, fontFamily:'JetBrains Mono,monospace', color:'var(--blue)', fontWeight:700, background:'var(--blue-s)', borderRadius:5, padding:'1px 6px' }}>{config.qrSize||56}px</span>
+                      <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                        <input type="text" inputMode="numeric" pattern="[0-9]*"
+                          value={qrSizeDraft ?? String(config.qrSize||56)}
+                          onChange={e => {
+                            const raw = e.target.value.replace(/[^0-9]/g, '')
+                            setQrSizeDraft(raw)
+                            if (raw !== '') upd('qrSize', Number(raw))
+                          }}
+                          onBlur={e => {
+                            const clamped = Math.min(200, Math.max(20, Number(e.target.value)||56))
+                            upd('qrSize', clamped)
+                            setQrSizeDraft(null)
+                          }}
+                          onKeyDown={e => { if (e.key==='Enter') e.target.blur() }}
+                          style={{ width:40, padding:'2px 6px', borderRadius:5, border:'1px solid var(--border)', fontSize:11, fontFamily:'JetBrains Mono,monospace', color:'var(--blue)', fontWeight:700, textAlign:'right', outline:'none' }}/>
+                        <span style={{ fontSize:10, color:'var(--ink3)' }}>px</span>
+                      </div>
                     </div>
-                    <input type="range" min={32} max={120} step={8}
+                    <input type="range" min={20} max={200} step={1}
                       value={config.qrSize||56}
-                      onChange={e => upd('qrSize', Number(e.target.value))}
+                      onChange={e => { upd('qrSize', Number(e.target.value)); setQrSizeDraft(null) }}
                       style={{ width:'100%', accentColor:'#2352ff' }}/>
                     <div style={{ display:'flex', justifyContent:'space-between', marginTop:2 }}>
-                      <span style={{ fontSize:9, color:'var(--ink3)' }}>32px · Small</span>
-                      <span style={{ fontSize:9, color:'var(--ink3)' }}>120px · Large</span>
+                      <span style={{ fontSize:9, color:'var(--ink3)' }}>20px · Small</span>
+                      <span style={{ fontSize:9, color:'var(--ink3)' }}>200px · Large</span>
                     </div>
                   </div>
 
