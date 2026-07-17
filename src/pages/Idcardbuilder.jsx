@@ -410,7 +410,10 @@ function getShiftedFields(fields, config, sub, CW) {
       const fieldMaxW    = CW - item.pos.x - 8
       const textW        = fieldMaxW - (showLabel && !highlight ? labelW + 8 : 0)
       const charsPerLine = Math.max(1, Math.floor(textW / (fSize * charFactor)))
-      const lines = Math.ceil(String(item.val).length / charsPerLine)
+      const valStr = String(item.val)
+      const wordCount = valStr.trim().split(/\s+/).length
+      // Only allow multi-line height when text has 4+ words; 3 or fewer words fit on one line
+      const lines = wordCount >= 4 ? Math.ceil(valStr.length / charsPerLine) : 1
       if (lines > maxLines) maxLines = lines
     })
     const fSize = config.fieldStyles?.[rowItems[0].f.key]?.fontSize ?? (config.fontSize || 11)
