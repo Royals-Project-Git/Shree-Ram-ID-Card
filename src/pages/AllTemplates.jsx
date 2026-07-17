@@ -13,7 +13,7 @@ import {
 import toast from 'react-hot-toast'
 
 const PAGE_SIZE = 25
-const MAX_PAGES = 3   // admin can pick at most 3 pages (75 cards) per ZIP
+
 
 /* ── Responsive hook ─────────────────────────────────────── */
 function useWindowWidth() {
@@ -114,10 +114,10 @@ function ProgressModal({ done, total, label }) {
 function RangePickerModal({ totalCards, school, filterClass, filterSection, onConfirm, onClose }) {
   const totalPages  = Math.ceil(totalCards / PAGE_SIZE)
   const [from, setFrom] = useState(1)
-  const [to,   setTo]   = useState(Math.min(totalPages, MAX_PAGES))
+  const [to,   setTo]   = useState(totalPages)
 
   useEffect(() => {
-    setTo(t => Math.min(Math.max(t, from), from + MAX_PAGES - 1, totalPages))
+    setTo(t => Math.min(Math.max(t, from), totalPages))
   }, [from, totalPages])
 
   const cardCount  = (to - from + 1) * PAGE_SIZE
@@ -160,9 +160,6 @@ function RangePickerModal({ totalCards, school, filterClass, filterSection, onCo
         <div>
           <div style={{ fontSize:12, fontWeight:700, color:'var(--ink2)', marginBottom:10 }}>
             Select page range to download
-            <span style={{ fontSize:11, color:'var(--ink3)', fontWeight:500, marginLeft:6 }}>
-              (max {MAX_PAGES} pages / {MAX_PAGES * PAGE_SIZE} cards at once)
-            </span>
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr auto 1fr', alignItems:'center', gap:10 }}>
             <div>
@@ -184,7 +181,7 @@ function RangePickerModal({ totalCards, school, filterClass, filterSection, onCo
                   border:'1.5px solid var(--border)', fontSize:14, fontWeight:600,
                   color:'var(--ink)', background:'var(--paper)', outline:'none', cursor:'pointer' }}>
                 {pageOptions
-                  .filter(p => p >= from && p <= from + MAX_PAGES - 1)
+                  .filter(p => p >= from)
                   .map(p => (
                     <option key={p} value={p}>Page {p}</option>
                   ))}
@@ -202,11 +199,11 @@ function RangePickerModal({ totalCards, school, filterClass, filterSection, onCo
             return (
               <div key={p}
                 onClick={() => {
-                  if (p < from || p > from + MAX_PAGES - 1) setFrom(p)
-                  setTo(t => {
-                    if (p >= from && p <= from + MAX_PAGES - 1) return p
-                    return Math.min(p, p + MAX_PAGES - 1, totalPages)
-                  })
+                  if (p < from) {
+                    setFrom(p)
+                  } else {
+                    setTo(p)
+                  }
                 }}
                 style={{
                   width:34, height:34, borderRadius:8, display:'flex',
@@ -239,6 +236,18 @@ function RangePickerModal({ totalCards, school, filterClass, filterSection, onCo
             </div>
           </div>
         </div>
+
+        {/* Warning if range is large */}
+        {to - from + 1 > 3 && (
+          <div style={{
+            fontSize:11, color:'#c2410c', background:'#fff7ed',
+            border:'1px solid #ffedd5', borderRadius:10, padding:'8px 10px',
+            lineHeight:1.4, fontWeight:600, display:'flex', gap:6, alignItems:'center'
+          }}>
+            <span>⚠️</span>
+            <span>Large range: rendering may take a few minutes. Keep window open.</span>
+          </div>
+        )}
 
         {/* Actions */}
         <div style={{ display:'flex', gap:10 }}>
@@ -861,7 +870,7 @@ export default function AllTemplates() {
   }
 
   /* ── Main ZIP generation ─────────────────────────────────── */
-  const generateZip = useCallback(async (fromPage, toPage) => {
+  const generateZip = useCallback(async (fromPage, toPage, customSubs = null) => {
     setShowRangePicker(false)
 
     try {
@@ -871,10 +880,10 @@ export default function AllTemplates() {
       ])
 
       setZipProgress({ done: 0, total: 0, label: 'Fetching records from database…' })
-      const subs = await fetchPageRange(fromPage, toPage)
+      const subs = customSubs || await fetchPageRange(fromPage, toPage)
 
       if (!subs.length) {
-        toast.error('No cards found for selected pages')
+        toast.error('No cards found')
         setZipProgress(null)
         return
       }
@@ -906,7 +915,7 @@ export default function AllTemplates() {
         school        !== 'All' ? school.replace(/\s+/g,'_')          : 'AllSchools',
         filterClass   !== 'All' ? `Class${filterClass.replace(/\s+/g,'_')}` : null,
         filterSection !== 'All' ? `Sec${filterSection.replace(/\s+/g,'_')}` : null,
-        `p${fromPage}-p${toPage}`,
+        customSubs ? 'current' : `p${fromPage}-p${toPage}`,
       ].filter(Boolean)
       link.download = `ID_Cards_${parts.join('_')}.zip`
       link.href     = URL.createObjectURL(blob)
@@ -914,11 +923,14 @@ export default function AllTemplates() {
       URL.revokeObjectURL(link.href)
 
       setZipProgress(null)
-      toast.success(`✅ Downloaded ${total} cards (pages ${fromPage}–${toPage})`)
+      toast.success(customSubs 
+        ? `✅ Downloaded ${total} cards (current view)`
+        : `✅ Downloaded ${total} cards (pages ${fromPage}–${toPage})`
+      )
     } catch (err) {
       console.error('ZIP error:', err)
       setZipProgress(null)
-      toast.error('ZIP generation failed. Try a smaller range.')
+      toast.error('ZIP generation failed.')
     }
   }, [fetchPageRange, captureCard, school, filterClass, filterSection])
 
@@ -1101,28 +1113,7 @@ export default function AllTemplates() {
       <button
         onClick={async () => {
           if (!filtered.length) { toast.error('No cards in current view'); return }
-          try {
-            const { default: html2canvas } = await import('html2canvas')
-            const { default: JSZip }       = await import('jszip')
-            const zip = new JSZip()
-            toast('Generating ZIP…', { icon:'⏳' })
-            for (const sub of filtered) {
-              const base64 = await captureCard(sub, html2canvas)
-              if (base64) zip.file(`${sub.name?.replace(/\s+/g,'_')}_IDCard.jpg`, base64, { base64:true })
-            }
-            const blob = await zip.generateAsync({ type:'blob' })
-            const link = document.createElement('a')
-            const parts = [
-              school        !== 'All' ? school.replace(/\s+/g,'_')               : 'AllSchools',
-              filterClass   !== 'All' ? `Class${filterClass.replace(/\s+/g,'_')}` : null,
-              filterSection !== 'All' ? `Sec${filterSection.replace(/\s+/g,'_')}` : null,
-              'current',
-            ].filter(Boolean)
-            link.download = `ID_Cards_${parts.join('_')}.zip`
-            link.href     = URL.createObjectURL(blob)
-            link.click()
-            toast.success(`Downloaded ${filtered.length} cards`)
-          } catch { toast.error('ZIP generation failed') }
+          await generateZip(displayPage, displayPage, filtered)
         }}
         style={{ width:'100%', padding:'10px 8px', borderRadius:10,
           border:'1.5px solid var(--border)', background:'var(--paper)',
@@ -1145,17 +1136,34 @@ export default function AllTemplates() {
           setRightOpen(false)
         }}
         style={{ width:'100%', padding:'12px 8px', borderRadius:10,
+          border:'1.5px solid var(--border)', background:'var(--paper)',
+          color:'var(--ink2)', fontSize:12, fontWeight:700, cursor:'pointer',
+          fontFamily:'inherit', marginBottom:16, lineHeight:1.4, textAlign:'left',
+          display:'flex', alignItems:'center', gap:8 }}
+        onMouseEnter={e=>{ e.currentTarget.style.borderColor='var(--blue)'; e.currentTarget.style.background='var(--blue-s)'; e.currentTarget.style.color='var(--blue)' }}
+        onMouseLeave={e=>{ e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.background='var(--paper)'; e.currentTarget.style.color='var(--ink2)' }}>
+        <span style={{ fontSize:16 }}>📦</span>
+        <span>Download Page Range…</span>
+      </button>
+
+      {/* Download All at once */}
+      <div style={{ fontSize:11, fontWeight:700, color:'var(--ink3)', textTransform:'uppercase',
+        letterSpacing:.5, marginBottom:8 }}>All cards</div>
+      <button
+        onClick={async () => {
+          if (!totalApprovedCount) { toast.error('No approved cards found'); return }
+          setRightOpen(false)
+          await generateZip(1, totalPages)
+        }}
+        style={{ width:'100%', padding:'12px 8px', borderRadius:10,
           background:'var(--blue)', color:'#fff', border:'none', fontSize:12,
           fontWeight:800, cursor:'pointer', letterSpacing:.3, lineHeight:1.4,
           display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}
         onMouseEnter={e=>e.currentTarget.style.background='#1538d4'}
         onMouseLeave={e=>e.currentTarget.style.background='var(--blue)'}>
-        <span style={{ fontSize:16 }}>📦</span>
-        <span>Download Page Range…</span>
+        <span style={{ fontSize:16 }}>⚡</span>
+        <span>Download All ({totalApprovedCount} cards)</span>
       </button>
-      <div style={{ fontSize:10, color:'var(--ink3)', marginTop:6, textAlign:'center', lineHeight:1.5 }}>
-        Up to {MAX_PAGES} pages ({MAX_PAGES * PAGE_SIZE} cards) per ZIP
-      </div>
     </>
   )
 

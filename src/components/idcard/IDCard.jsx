@@ -12,6 +12,81 @@ function formatDOB(val) {
   return `${d}/${m}/${y}`
 }
 
+/* ── Helper to calculate shifted Y coordinates for absolute/drag fields to prevent overlaps ── */
+function getShiftedFields(fields, config, sub, CW) {
+  // Map fields with their positions and values, filter empty, sort by Y
+  const mapped = [...fields]
+    .map(f => {
+      const pos = config.fieldPositions?.[f.key] || DEFAULT_POSITIONS[f.key] || { x: 20, y: 200 }
+      const rawVal = sub[f.key]
+      const val = f.key === 'date_of_birth' ? formatDOB(rawVal) : rawVal
+      return { f, pos, val }
+    })
+    .filter(item => item.val)
+    .sort((a, b) => a.pos.y - b.pos.y)
+
+  // Group fields sharing the same visual row (within 4px Y tolerance)
+  const rows = []
+  mapped.forEach(item => {
+    let placed = false
+    for (const row of rows) {
+      if (Math.abs(row.baseY - item.pos.y) <= 4) {
+        row.items.push(item)
+        placed = true
+        break
+      }
+    }
+    if (!placed) {
+      rows.push({ baseY: item.pos.y, items: [item] })
+    }
+  })
+
+  // Estimate the pixel height a row will actually render to
+  function estimateRowHeight(rowItems) {
+    let maxLines = 1
+    rowItems.forEach(item => {
+      const fs         = config.fieldStyles?.[item.f.key] || {}
+      const highlight  = fs.highlight || false
+      const fSize      = fs.fontSize ?? (config.fontSize || 11)
+      const showLabel  = fs.showLabel !== false
+      const labelW     = config.labelWidth || 72
+      const isUppercase = fs.uppercase || false
+      const fontWeight  = fs.fontWeight ?? (highlight ? 700 : 600)
+      // Uppercase & bold text renders wider per character
+      // Use 0.78 factor for uppercase/bold, 0.62 for normal text
+      const charFactor   = (isUppercase || fontWeight >= 700) ? 0.78 : 0.62
+      const fieldMaxW    = CW - item.pos.x - 8
+      const textW        = fieldMaxW - (showLabel && !highlight ? labelW + 8 : 0)
+      const charsPerLine = Math.max(1, Math.floor(textW / (fSize * charFactor)))
+      const lines = Math.ceil(String(item.val).length / charsPerLine)
+      if (lines > maxLines) maxLines = lines
+    })
+    const fSize = config.fieldStyles?.[rowItems[0].f.key]?.fontSize ?? (config.fontSize || 11)
+    return maxLines * fSize * 1.5 + 4
+  }
+
+  // Propagate cumulative shifts: if a row is taller than the natural gap to the
+  // next row, push every subsequent row down by the overflow amount.
+  let cumulativeShift = 0
+  const result = []
+
+  rows.forEach((row, idx) => {
+    row.items.forEach(item => {
+      result.push({ ...item, shiftedY: item.pos.y + cumulativeShift })
+    })
+
+    if (idx < rows.length - 1) {
+      const naturalGap  = rows[idx + 1].baseY - row.baseY
+      const rowHeight   = estimateRowHeight(row.items)
+      const overflow    = Math.max(0, rowHeight - naturalGap)
+      cumulativeShift  += overflow
+    }
+  })
+
+  return result
+}
+
+
 /* ── Built-in templates (used when no customConfig) ── */
 const TEMPLATES = {
   T1: { name: 'Royal Blue',  c1: '#2352ff', c2: '#1538d4', accent: '#e8ecff' },
@@ -223,68 +298,64 @@ const IDCard = forwardRef(function IDCard(
             }
           </div>
 
-          {/* Fields — DRAG mode: absolute positions */}
-          {c.layoutMode !== 'flow' && visibleFields.map(f => {
-            const pos    = getPos(f.key)
-            const rawVal = sub[f.key]
-            const val    = f.key === 'date_of_birth' ? formatDOB(rawVal) : rawVal
-            if (!val) return null
-            const fs        = c.fieldStyles?.[f.key] || {}
-            const highlight = fs.highlight || false
-            const fSize     = fs.fontSize  ?? (c.fontSize || 11)
-            const lSize     = Math.max(fSize - 1, 7)
-            const fWeight   = fs.fontWeight ?? (highlight ? 700 : 600)
-            const textColor = fs.textColor  || (highlight ? '#fff' : '#1a1a2e')
-            const bgColor   = fs.bgColor    || c1
-            const uppercase = fs.uppercase  || false
-            const showLabel = fs.showLabel  !== false
-            const brad      = fs.borderRadius ?? 4
-            const fontFam   = fs.fontFamily  || c.globalFontFamily || 'Instrument Sans,sans-serif'
-            const displayVal = uppercase ? (val||'').toUpperCase() : val
-            const fieldMaxW  = CW - pos.x - 8
+          {/* Fields — DRAG mode: absolute positions with dynamic shift */}
+          {c.layoutMode !== 'flow' && (() => {
+            const shiftedFields = getShiftedFields(visibleFields, c, sub, CW)
+            return shiftedFields.map(({ f, pos, val, shiftedY }) => {
+              const fs        = c.fieldStyles?.[f.key] || {}
+              const highlight = fs.highlight || false
+              const fSize     = fs.fontSize  ?? (c.fontSize || 11)
+              const lSize     = Math.max(fSize - 1, 7)
+              const fWeight   = fs.fontWeight ?? (highlight ? 700 : 600)
+              const textColor = fs.textColor  || (highlight ? '#fff' : '#1a1a2e')
+              const bgColor   = fs.bgColor    || c1
+              const uppercase = fs.uppercase  || false
+              const showLabel = fs.showLabel  !== false
+              const brad      = fs.borderRadius ?? 4
+              const fontFam   = fs.fontFamily  || c.globalFontFamily || 'Instrument Sans,sans-serif'
+              const displayVal = uppercase ? (val||'').toUpperCase() : val
+              const fieldMaxW  = CW - pos.x - 8
 
-            if (highlight) {
+              if (highlight) {
+                return (
+                  <div key={f.key} style={{
+                    position:'absolute', left:pos.x, top:shiftedY, zIndex:8,
+                    maxWidth: fieldMaxW,
+                    background: bgColor, borderRadius: brad,
+                    padding:'3px 8px', display:'inline-block',
+                  }}>
+                    <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
+                      letterSpacing:uppercase?1.5:0.2,
+                      textTransform:uppercase?'uppercase':'none', display:'block', fontFamily:fontFam,
+                      wordBreak:'break-word', overflowWrap:'break-word',
+                    }}>
+                      {displayVal}
+                    </span>
+                  </div>
+                )
+              }
+
+              const labelW = c.labelWidth || 72
+
               return (
                 <div key={f.key} style={{
-                  position:'absolute', left:pos.x, top:pos.y, zIndex:8,
+                  position:'absolute', left:pos.x, top:shiftedY,
                   maxWidth: fieldMaxW,
-                  background: bgColor, borderRadius: brad,
-                  padding:'3px 8px', display:'inline-block',
+                  padding:'2px 6px', zIndex:8,
+                  display:'flex', alignItems:'flex-start', gap:0,
                 }}>
+                  {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', whiteSpace:'nowrap', display:'inline-block', minWidth:labelW, lineHeight:1.3 }}>{f.label}</span>}
+                  {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0, lineHeight:1.3 }}>:</span>}
                   <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
-                    letterSpacing:uppercase?1.5:0.2,
-                    textTransform:uppercase?'uppercase':'none', display:'block', fontFamily:fontFam,
-                    wordBreak:'break-word', overflowWrap:'break-word',
-                  }}>
-                    {displayVal}
-                  </span>
+                    textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
+                    wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
+                  }}>{displayVal}</span>
                 </div>
               )
-            }
+            })
+          })()}
 
-            const labelW = c.labelWidth || 72
-
-            return (
-              <div key={f.key} style={{
-                position:'absolute', left:pos.x, top:pos.y,
-                maxWidth: fieldMaxW,
-                padding:'2px 6px', zIndex:8,
-                display:'flex', alignItems:'flex-start', gap:0,
-              }}>
-                {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', whiteSpace:'nowrap', display:'inline-block', minWidth:labelW, lineHeight:1.3 }}>{f.label}</span>}
-                {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0, lineHeight:1.3 }}>:</span>}
-                <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
-                  textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
-                  wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
-                }}>{displayVal}</span>
-              </div>
-            )
-          })}
-
-          {/* Fields — FLOW mode: 2-column layout
-              - Full Name → full width, first row
-              - Address → full width, last row
-              - All other fields → paired side-by-side in 2 columns */}
+          {/* Fields — FLOW mode: 2-column layout */}
           {c.layoutMode === 'flow' && (() => {
             const fSize   = c.fontSize || 11
             const lSize   = Math.max(fSize - 1, 7)
@@ -358,84 +429,88 @@ const IDCard = forwardRef(function IDCard(
               }
             })
 
-            const elements = []
-            let currentY = startY
+            return (
+              <div style={{
+                position: 'absolute',
+                left: startX,
+                top: startY,
+                width: availW,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: rowGap,
+                zIndex: 8,
+              }}>
+                {rows.map((row, rowIdx) => (
+                  <div key={rowIdx} style={{
+                    display: 'flex',
+                    gap: 4,
+                    width: '100%',
+                  }}>
+                    {row.fields.map((f) => {
+                      const rawVal    = sub[f.key]
+                      const val       = f.key === 'date_of_birth' ? formatDOB(rawVal) : rawVal
+                      const fs        = c.fieldStyles?.[f.key] || {}
+                      const highlight = fs.highlight || false
+                      const ffSize    = fs.fontSize  ?? fSize
+                      const ffWeight  = fs.fontWeight ?? (highlight ? 700 : 600)
+                      const textColor = fs.textColor  || (highlight ? '#fff' : '#1a1a2e')
+                      const bgColor   = fs.bgColor    || c1
+                      const uppercase = fs.uppercase  || false
+                      const showLabel = fs.showLabel  !== false
+                      const brad      = fs.borderRadius ?? 4
+                      const fontFam   = fs.fontFamily  || c.globalFontFamily || 'Instrument Sans,sans-serif'
+                      const displayVal = uppercase ? (val||'').toUpperCase() : val
+                      const fieldLW    = row.isFullWidth ? lw : Math.min(lw, Math.floor(availW * 0.5 * 0.45))
 
-            rows.forEach((row, rowIdx) => {
-              const colW = row.isFullWidth ? availW : Math.floor((availW - 4) / 2)
+                      if (highlight) {
+                        return (
+                          <div key={f.key} style={{
+                            flex: row.isFullWidth ? '1 1 100%' : '1 1 50%',
+                            minWidth: 0,
+                            background: bgColor, borderRadius: brad,
+                            padding:'3px 8px', display:'flex',
+                            alignItems:'center',
+                            justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
+                          }}>
+                            <span style={{ fontSize:ffSize, fontWeight:ffWeight, color:textColor,
+                              letterSpacing:uppercase?1.5:0.2,
+                              textTransform:uppercase?'uppercase':'none', display:'block', fontFamily:fontFam,
+                              wordBreak:'break-word', overflowWrap:'break-word',
+                              textAlign: align === 'center' ? 'center' : align === 'right' ? 'right' : 'left',
+                            }}>
+                              {displayVal}
+                            </span>
+                          </div>
+                        )
+                      }
 
-              row.fields.forEach((f, colIdx) => {
-                const rawVal    = sub[f.key]
-                const val       = f.key === 'date_of_birth' ? formatDOB(rawVal) : rawVal
-                const leftX     = row.isFullWidth ? startX : startX + colIdx * (colW + 4)
-                const fs        = c.fieldStyles?.[f.key] || {}
-                const highlight = fs.highlight || false
-                const ffSize    = fs.fontSize  ?? fSize
-                const ffWeight  = fs.fontWeight ?? (highlight ? 700 : 600)
-                const textColor = fs.textColor  || (highlight ? '#fff' : '#1a1a2e')
-                const bgColor   = fs.bgColor    || c1
-                const uppercase = fs.uppercase  || false
-                const showLabel = fs.showLabel  !== false
-                const brad      = fs.borderRadius ?? 4
-                const fontFam   = fs.fontFamily  || c.globalFontFamily || 'Instrument Sans,sans-serif'
-                const displayVal = uppercase ? (val||'').toUpperCase() : val
-                const fieldLW    = row.isFullWidth ? lw : Math.min(lw, Math.floor(colW * 0.45))
-
-                if (highlight) {
-                  elements.push(
-                    <div key={f.key} style={{
-                      position: 'absolute', left: leftX, top: currentY, width: row.isFullWidth ? availW : colW, zIndex: 8,
-                      display: 'flex', alignItems: 'center',
-                      background: bgColor, borderRadius: brad, padding: '3px 8px',
-                      justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
-                    }}>
-                      <span style={{
-                        fontSize: ffSize, fontWeight: ffWeight, color: textColor,
-                        letterSpacing: uppercase ? 1.5 : 0.2, textTransform: uppercase ? 'uppercase' : 'none',
-                        flex: 1, minWidth: 0, wordBreak: 'break-word', overflowWrap: 'break-word',
-                        textAlign: align === 'center' ? 'center' : align === 'right' ? 'right' : 'left',
-                        fontFamily: fontFam,
-                      }}>{displayVal}</span>
-                    </div>
-                  )
-                } else {
-                  elements.push(
-                    <div key={f.key} style={{
-                      position: 'absolute', left: leftX, top: currentY, width: row.isFullWidth ? availW : colW, zIndex: 8,
-                      display: 'flex', alignItems: 'flex-start',
-                      justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
-                    }}>
-                      {showLabel && <span style={{
-                        fontSize: lSize, fontWeight: 700, color: '#333',
-                        width: fieldLW, minWidth: fieldLW, flexShrink: 0, whiteSpace: 'nowrap',
-                        textAlign: align === 'right' ? 'right' : 'left',
-                        lineHeight: 1.3,
-                      }}>{f.label}</span>}
-                      {showLabel && <span style={{ fontSize: lSize, fontWeight: 700, color: '#555', margin: '0 4px 0 0', flexShrink: 0, lineHeight: 1.3 }}>:</span>}
-                      <span style={{
-                        fontSize: ffSize, fontWeight: ffWeight, color: textColor,
-                        flex: 1, minWidth: 0, wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: 1.3,
-                        textAlign: align === 'right' ? 'right' : 'left',
-                        textTransform: uppercase ? 'uppercase' : 'none',
-                        fontFamily: fontFam,
-                      }}>{displayVal}</span>
-                    </div>
-                  )
-                }
-              })
-              // Dynamic row height: estimate lines of text to avoid overlap on wrapped content
-              const textW = row.isFullWidth ? availW - lw - 20 : Math.floor((availW - 4) / 2) - Math.min(lw, Math.floor(Math.floor((availW - 4) / 2) * 0.45)) - 20
-              const charsPerLine = Math.max(1, Math.floor(textW / (fSize * 0.55)))
-              let maxLines = 1
-              row.fields.forEach(f => {
-                const val = sub[f.key] || ''
-                const lines = Math.ceil(val.length / charsPerLine)
-                if (lines > maxLines) maxLines = lines
-              })
-              currentY += maxLines > 1 ? Math.max(rowGap, maxLines * fSize * 1.3 + 4) : rowGap
-            })
-
-            return elements
+                      return (
+                        <div key={f.key} style={{
+                          flex: row.isFullWidth ? '1 1 100%' : '1 1 50%',
+                          minWidth: 0,
+                          padding:'2px 6px',
+                          display:'flex', alignItems:'flex-start', gap:0,
+                          justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
+                        }}>
+                          {showLabel && <span style={{
+                            fontSize:lSize, fontWeight:700, color:'#333',
+                            width:fieldLW, minWidth:fieldLW, flexShrink: 0, whiteSpace:'nowrap',
+                            textAlign: align === 'right' ? 'right' : 'left',
+                            lineHeight:1.3,
+                          }}>{f.label}</span>}
+                          {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 4px 0 0', flexShrink:0, lineHeight:1.3 }}>:</span>}
+                          <span style={{ fontSize:ffSize, fontWeight:ffWeight, color:textColor,
+                            textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
+                            wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
+                            textAlign: align === 'right' ? 'right' : 'left',
+                          }}>{displayVal}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            )
           })()}
 
 
