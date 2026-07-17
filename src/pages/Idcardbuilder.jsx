@@ -191,6 +191,7 @@ const ALL_FIELDS = [
   { key:'department',        label:'Department',        icon:'🏢' },
   { key:'mode_of_transport', label:'Transport',         icon:'🚌' },
   { key:'employee_id',       label:'Employee ID',       icon:'🪪' },
+  { key:'aadhar_card',       label:'Aadhaar No.',       icon:'🪪' },
 ]
 
 const DEFAULT_FIELD_POSITIONS = {
@@ -209,6 +210,7 @@ const DEFAULT_FIELD_POSITIONS = {
   department:        { x:110, y:170 },
   mode_of_transport: { x:16,  y:365 },
   employee_id:       { x:110, y:192 },
+  aadhar_card:       { x:16,  y:395 },
 }
 
 const DEFAULT_CONFIG = {
@@ -365,15 +367,14 @@ function formatDOB(val) {
 
 /* ── Helper to calculate shifted Y coordinates for absolute/drag fields to prevent overlaps ── */
 function getShiftedFields(fields, config, sub, CW) {
-  // Map fields with their positions and values, filter empty, sort by Y
+  // Map fields with their positions and values, sort by Y (use placeholder if value is empty so fields are always editable in builder)
   const mapped = [...fields]
     .map(f => {
       const pos = config.fieldPositions?.[f.key] || _DFP[f.key] || { x: 20, y: 200 }
       const rawVal = sub[f.key]
       const val = f.key === 'date_of_birth' ? formatDOB(rawVal) : rawVal
-      return { f, pos, val }
+      return { f, pos, val: val || `[${f.label}]` }
     })
-    .filter(item => item.val)
     .sort((a, b) => a.pos.y - b.pos.y)
 
   // Group fields sharing the same visual row (within 4px Y tolerance)
@@ -448,7 +449,7 @@ const _DFP = {
   contact_number:{x:16,y:265},emergency_contact:{x:16,y:298},
   address:{x:16,y:330},designation:{x:110,y:148},
   department:{x:110,y:170},mode_of_transport:{x:16,y:365},
-  employee_id:{x:110,y:192},
+  employee_id:{x:110,y:192},aadhar_card:{x:16,y:395},
 }
 function _gfp(config, key) {
   return config.fieldPositions?.[key] || _DFP[key] || { x:20, y:200 }

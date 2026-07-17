@@ -111,6 +111,7 @@ const ALL_FIELDS = [
   { key:'department',       label:'Department'        },
   { key:'mode_of_transport',label:'Transport'         },
   { key:'employee_id',      label:'Employee ID'       },
+  { key:'aadhar_card',      label:'Aadhaar No.'       },
 ]
 
 /* ── Default positions — matches IDCardBuilder exactly ── */
@@ -130,6 +131,7 @@ const DEFAULT_POSITIONS = {
   department:        { x: 110, y: 140 },
   mode_of_transport: { x: 16,  y: 355 },
   employee_id:       { x: 110, y: 162 },
+  aadhar_card:       { x: 16,  y: 390 },
 }
 
 /* ══════════════════════════════════════════════════════════════
