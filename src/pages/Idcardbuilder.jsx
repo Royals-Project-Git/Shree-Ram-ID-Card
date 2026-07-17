@@ -6,7 +6,6 @@ import { useCardTemplates } from '../hooks/useCardtemplates'
 import { Btn, Spinner } from '../components/shared/index'
 import { uploadBgImage } from '../lib/firebase'
 import toast from 'react-hot-toast'
-import { validateCardLayout } from '../lib/layoutValidator'
 import QRCode from 'qrcode'
 
 const SNAP         = 8
@@ -1195,25 +1194,6 @@ export default function IDCardBuilder() {
   const handleSave = async () => {
     if (!templateName.trim()) { toast.error('Enter template name'); return }
     if (config.visibleFields.length===0) { toast.error('Add at least one field'); return }
-
-    // Run layout validation check
-    const cardEl = document.getElementById('builder-card-canvas')
-    if (cardEl) {
-      const CW = config.cardW || 340
-      const CH = config.cardH || 480
-      const { warnings, errors } = validateCardLayout(cardEl, CW, CH)
-      if (errors.length > 0) {
-        errors.forEach(err => toast.error(`Layout Error: ${err}`))
-        return
-      }
-      if (warnings.length > 0) {
-        const msg = `Layout Warnings:\n${warnings.slice(0, 3).map(w => '• ' + w).join('\n')}${warnings.length > 3 ? `\n• and ${warnings.length - 3} more issues.` : ''}\n\nDo you want to save anyway?`
-        if (!window.confirm(msg)) {
-          return
-        }
-      }
-    }
-
     setSaving(true)
     try {
       if (editId) {
