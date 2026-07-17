@@ -657,10 +657,12 @@ const IDCard = forwardRef(function IDCard(
           <div style={{ display:'flex', flexDirection:'column', gap:5,
             paddingTop:10, borderTop:'1px solid #f0f0f0' }}>
             {[
+              ['Father\'s Name', sub.fathers_name],
               ['Date of Birth', formatDOB(sub.date_of_birth)],
               ['Blood Group',   sub.blood_group],
               ['Contact',       sub.contact_number],
               ['Emergency',     sub.emergency_contact],
+              ['Aadhaar No.',   sub.aadhar_card],
               ['Department',    sub.department],
               ['Transport',     sub.mode_of_transport],
               ['Employee ID',   sub.employee_id],
