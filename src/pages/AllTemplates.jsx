@@ -754,17 +754,17 @@ export default function AllTemplates() {
 
   const captureCard = useCallback(async (sub, html2canvas) => {
     const orgLogo = organizations.find(o => o.name === sub.school_name)?.logo_url || null
-    const tplId   = customTemplate ? null : templateId
-    const config  = customTemplate?.config || null
+    const activeConfig  = sub.customConfig || customTemplate?.config || null
+    const tplId         = sub.customConfig ? null : (customTemplate ? null : templateId)
 
-    const cardW = config?.cardW || 340
-    const cardH = config?.cardH || 480
+    const cardW = activeConfig?.cardW || 340
+    const cardH = activeConfig?.cardH || 480
 
     // Pre-convert all external images to base64 BEFORE rendering
     // so html2canvas never has to deal with CORS at all
-    const photoBase64  = sub.photo_url    ? await urlToBase64(sub.photo_url)    : null
-    const logoBase64   = orgLogo          ? await urlToBase64(orgLogo)           : null
-    const bgBase64     = config?.bgImage  ? await urlToBase64(config.bgImage)   : null
+    const photoBase64  = sub.photo_url          ? await urlToBase64(sub.photo_url)    : null
+    const logoBase64   = orgLogo                ? await urlToBase64(orgLogo)           : null
+    const bgBase64     = activeConfig?.bgImage  ? await urlToBase64(activeConfig.bgImage)   : null
 
     // Build a patched submission with base64 URLs
     const patchedSub = {
@@ -772,8 +772,8 @@ export default function AllTemplates() {
       photo_url: photoBase64 || sub.photo_url,
     }
     const patchedLogo   = logoBase64 || orgLogo
-    const patchedConfig = config
-      ? { ...config, bgImage: bgBase64 || config.bgImage }
+    const patchedConfig = activeConfig
+      ? { ...activeConfig, bgImage: bgBase64 || activeConfig.bgImage }
       : null
 
     const container = document.createElement('div')
@@ -1310,7 +1310,7 @@ export default function AllTemplates() {
                         if (customTemplate) {
                           navigate(`/card-builder?edit=${customTemplate.id}&sub=${sub.id}`)
                         } else {
-                          navigate(`/card-builder?sub=${sub.id}`)
+                          navigate(`/card-builder?sub=${sub.id}&tpl=${templateId}`)
                         }
                       }}
                       cardRefs={cardRefs}
@@ -1495,7 +1495,7 @@ export default function AllTemplates() {
                       if (customTemplate) {
                         navigate(`/card-builder?edit=${customTemplate.id}&sub=${sub.id}`)
                       } else {
-                        navigate(`/card-builder?sub=${sub.id}`)
+                        navigate(`/card-builder?sub=${sub.id}&tpl=${templateId}`)
                       }
                     }}
                     cardRefs={cardRefs}

@@ -53,19 +53,18 @@ function getShiftedFields(fields, config, sub, CW) {
       const isUppercase = fs.uppercase || false
       const fontWeight  = fs.fontWeight ?? (highlight ? 700 : 600)
       // Uppercase & bold text renders wider per character
-      // Use 0.78 factor for uppercase/bold, 0.62 for normal text
-      const charFactor   = (isUppercase || fontWeight >= 700) ? 0.78 : 0.62
+      // Use 0.58 factor for uppercase/bold, 0.48 for normal text
+      const charFactor   = (isUppercase || fontWeight >= 700) ? 0.58 : 0.48
       const fieldMaxW    = CW - item.pos.x - 8
       const textW        = fieldMaxW - (showLabel && !highlight ? labelW + 8 : 0)
       const charsPerLine = Math.max(1, Math.floor(textW / (fSize * charFactor)))
       const valStr = String(item.val)
-      const wordCount = valStr.trim().split(/\s+/).length
-      // Only allow multi-line height when text has 4+ words; 3 or fewer words fit on one line
-      const lines = wordCount >= 4 ? Math.ceil(valStr.length / charsPerLine) : 1
+      // Always calculate lines based on character count vs available width
+      const lines = Math.ceil(valStr.length / charsPerLine)
       if (lines > maxLines) maxLines = lines
     })
     const fSize = config.fieldStyles?.[rowItems[0].f.key]?.fontSize ?? (config.fontSize || 11)
-    return maxLines * fSize * 1.5 + 4
+    return maxLines * fSize * 1.3 + 2
   }
 
   // Propagate cumulative shifts: if a row is taller than the natural gap to the
@@ -177,9 +176,10 @@ const IDCard = forwardRef(function IDCard(
 ) {
   const sub = submission || {}
 
+  const c = sub.customConfig || customConfig
+
   /* ── MODE 1: Custom template from builder ── */
-  if (customConfig) {
-    const c            = customConfig
+  if (c) {
     const c1           = c.c1     || '#2352ff'
     const c2           = c.c2     || '#1538d4'
     const accent       = c.accent || '#e8ecff'

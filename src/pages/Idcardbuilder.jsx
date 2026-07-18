@@ -19,6 +19,12 @@ const SIZE_PRESETS = {
   square:    { label:'Square',    w:380, h:380 },
 }
 
+const TEMPLATES = {
+  T1: { name: 'Royal Blue',  c1: '#2352ff', c2: '#1538d4', accent: '#e8ecff' },
+  T2: { name: 'Emerald',     c1: '#059669', c2: '#047857', accent: '#d1fae5' },
+  T3: { name: 'Deep Maroon', c1: '#9f1239', c2: '#881337', accent: '#ffe4e6' },
+}
+
 
 /* ─────────────────────────────────────────────────────────────
    LAYOUT PRESETS  — one-click field positioning for common
@@ -405,19 +411,18 @@ function getShiftedFields(fields, config, sub, CW) {
       const isUppercase = fs.uppercase || false
       const fontWeight  = fs.fontWeight ?? (highlight ? 700 : 600)
       // Uppercase & bold text renders wider per character
-      // Use 0.78 factor for uppercase/bold, 0.62 for normal text
-      const charFactor   = (isUppercase || fontWeight >= 700) ? 0.78 : 0.62
+      // Use 0.58 factor for uppercase/bold, 0.48 for normal text
+      const charFactor   = (isUppercase || fontWeight >= 700) ? 0.58 : 0.48
       const fieldMaxW    = CW - item.pos.x - 8
       const textW        = fieldMaxW - (showLabel && !highlight ? labelW + 8 : 0)
       const charsPerLine = Math.max(1, Math.floor(textW / (fSize * charFactor)))
       const valStr = String(item.val)
-      const wordCount = valStr.trim().split(/\s+/).length
-      // Only allow multi-line height when text has 4+ words; 3 or fewer words fit on one line
-      const lines = wordCount >= 4 ? Math.ceil(valStr.length / charsPerLine) : 1
+      // Always calculate lines based on character count vs available width
+      const lines = Math.ceil(valStr.length / charsPerLine)
       if (lines > maxLines) maxLines = lines
     })
     const fSize = config.fieldStyles?.[rowItems[0].f.key]?.fontSize ?? (config.fontSize || 11)
-    return maxLines * fSize * 1.5 + 4
+    return maxLines * fSize * 1.3 + 2
   }
 
   // Propagate cumulative shifts: if a row is taller than the natural gap to the
@@ -1084,7 +1089,7 @@ export default function IDCardBuilder() {
   const [searchParams] = useSearchParams()
   const editId         = searchParams.get('edit')   // present when editing an existing template
 
-  const { submissions, loading: subLoading } = useSubmissions()
+  const { submissions, loading: subLoading, updateSubmission } = useSubmissions()
   const { organizations }                    = useOrganizations()
   const { templates, saveTemplate, updateTemplate } = useCardTemplates()
 
@@ -1115,24 +1120,29 @@ export default function IDCardBuilder() {
   useEffect(() => { setFsFontDraft(null) }, [selected])  // reset per-field draft when switching fields
   const bgInputRef    = useRef(null)
   const editLoaded    = useRef(false)   // prevents re-loading on every templates update
+  const subLoaded     = useRef(false)
+  const subId         = searchParams.get('sub')
+  const tplId         = searchParams.get('tpl')
+
+  const approved   = submissions.filter(s => s.status==='approved')
+  const [customPreviewSub, setCustomPreviewSub] = useState(null)
+  const previewSub = customPreviewSub || approved[previewIdx] || null
 
   /* ── Load existing template when ?edit=ID is present ── */
   useEffect(() => {
     if (!editId || !templates.length || editLoaded.current) return
+    if (subId && previewSub && previewSub.id === subId && previewSub.customConfig) {
+      return
+    }
     const tpl = templates.find(t => t.id === editId)
     if (!tpl) { toast.error('Template not found'); return }
     editLoaded.current = true
     setTemplateName(tpl.name || '')
     setSelectedOrg(tpl.org_id || '')
     setConfig({ ...DEFAULT_CONFIG, ...(tpl.config || {}) })
-  }, [editId, templates])
-
-  const approved   = submissions.filter(s => s.status==='approved')
-  const [customPreviewSub, setCustomPreviewSub] = useState(null)
-  const previewSub = customPreviewSub || approved[previewIdx] || null
+  }, [editId, templates, subId, previewSub])
 
   useEffect(() => {
-    const subId = searchParams.get('sub')
     if (!subId) return
     if (approved.length > 0) {
       const idx = approved.findIndex(s => s.id === subId)
@@ -1157,7 +1167,22 @@ export default function IDCardBuilder() {
     }
     fetchSub()
     return () => { active = false }
-  }, [searchParams, approved])
+  }, [searchParams, approved, subId])
+
+  /* ── Load preview sub customConfig if present ── */
+  useEffect(() => {
+    if (!subId || !previewSub || subLoaded.current) return
+    if (previewSub.id !== subId) return
+    subLoaded.current = true
+    if (previewSub.customConfig) {
+      setConfig({ ...DEFAULT_CONFIG, ...previewSub.customConfig })
+    } else if (editId) {
+      // Handled by template loading useEffect
+    } else if (tplId) {
+      const builtIn = TEMPLATES[tplId] || TEMPLATES.T1
+      setConfig({ ...DEFAULT_CONFIG, c1: builtIn.c1, c2: builtIn.c2, accent: builtIn.accent })
+    }
+  }, [subId, previewSub, editId, tplId])
 
   const previewOptions = useMemo(() => {
     const list = [...approved]
@@ -1285,10 +1310,20 @@ export default function IDCardBuilder() {
   }
 
   const handleSave = async () => {
-    if (!templateName.trim()) { toast.error('Enter template name'); return }
     if (config.visibleFields.length===0) { toast.error('Add at least one field'); return }
     setSaving(true)
     try {
+      if (subId) {
+        /* ── SAVE to individual submission ── */
+        const ok = await updateSubmission(subId, { customConfig: config })
+        if (ok) {
+          toast.success(`Changes saved for ${previewSub?.name || 'card'}!`)
+          navigate('/templates')
+        }
+        return
+      }
+
+      if (!templateName.trim()) { toast.error('Enter template name'); return }
       if (editId) {
         /* ── UPDATE existing template ── */
         await updateTemplate(editId, { name:templateName.trim(), org_id:selectedOrg||null, org_name:orgName||null, config })
@@ -2342,18 +2377,34 @@ export default function IDCardBuilder() {
             style={{ padding:'6px 10px', borderRadius:8, border:'1.5px solid var(--border)', background:'var(--paper2)', color:'var(--ink2)', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>← Back</button>
 
           {/* Edit mode badge */}
-          {editId && (
+          {subId ? (
+            <div style={{ flexShrink:0, padding:'4px 10px', borderRadius:20, background:'#ecfdf5',
+              border:'1px solid #10b981', fontSize:11, fontWeight:700, color:'#047857', whiteSpace:'nowrap' }}>
+              👤 Individual Edit
+            </div>
+          ) : editId ? (
             <div style={{ flexShrink:0, padding:'4px 10px', borderRadius:20, background:'var(--amber-s)',
               border:'1px solid #fcd34d', fontSize:11, fontWeight:700, color:'#b45309', whiteSpace:'nowrap' }}>
               ✎ Editing template
             </div>
-          )}
+          ) : null}
 
-          <input value={templateName} onChange={e => setTemplateName(e.target.value)}
-            placeholder="Template name..."
-            style={{ flex:1, border:'1.5px solid var(--border)', borderRadius:8, fontSize:14, fontWeight:700, color:'var(--ink)', background:'var(--paper2)', outline:'none', fontFamily:'Outfit,sans-serif', padding:'7px 10px', transition:'border .15s', minWidth:0 }}
-            onFocus={e => e.target.style.borderColor='#2352ff'}
-            onBlur={e  => e.target.style.borderColor='var(--border)'}/>
+          {subId ? (
+            <div style={{ display:'flex', flexDirection:'column', gap:1, minWidth:0, flex:1 }}>
+              <div style={{ fontSize:14, fontWeight:700, color:'var(--ink)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                Layout Override: {previewSub?.name || 'Loading...'}
+              </div>
+              <div style={{ fontSize:10, color:'var(--ink3)', fontWeight:500 }}>
+                Adjusting layout for this card only
+              </div>
+            </div>
+          ) : (
+            <input value={templateName} onChange={e => setTemplateName(e.target.value)}
+              placeholder="Template name..."
+              style={{ flex:1, border:'1.5px solid var(--border)', borderRadius:8, fontSize:14, fontWeight:700, color:'var(--ink)', background:'var(--paper2)', outline:'none', fontFamily:'Outfit,sans-serif', padding:'7px 10px', transition:'border .15s', minWidth:0 }}
+              onFocus={e => e.target.style.borderColor='#2352ff'}
+              onBlur={e  => e.target.style.borderColor='var(--border)'}/>
+          )}
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
           <div className="icb-chip" style={{ fontSize:11, color:'var(--ink3)', fontFamily:'JetBrains Mono,monospace', background:'var(--paper2)', border:'1px solid var(--border)', borderRadius:6, padding:'4px 8px', whiteSpace:'nowrap' }}>
@@ -2381,10 +2432,10 @@ export default function IDCardBuilder() {
             style={{ padding:'6px 10px', borderRadius:8, border:'1.5px solid var(--border)', background:'transparent', color:'var(--ink2)', fontSize:12, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>↺ Reset</button>
           <button onClick={handleSave} disabled={saving}
             style={{ padding:'7px 14px', borderRadius:8, border:'none',
-              background: saving ? 'var(--border2)' : editId ? '#b45309' : '#2352ff',
+              background: saving ? 'var(--border2)' : subId ? '#10b981' : editId ? '#b45309' : '#2352ff',
               color:'#fff', fontSize:13, fontWeight:700,
               cursor:saving?'not-allowed':'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
-            {saving ? '⏳' : editId ? '💾 Update' : '💾 Save'}
+            {saving ? '⏳' : subId ? '💾 Save for Card' : editId ? '💾 Update' : '💾 Save'}
           </button>
         </div>
       </div>
