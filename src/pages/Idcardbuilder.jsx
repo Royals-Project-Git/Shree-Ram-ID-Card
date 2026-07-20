@@ -464,7 +464,7 @@ function _gfp(config, key) {
 }
 function _gfs(config, key) { return config.fieldStyles?.[key] || {} }
 
-function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClick, onValueChange, effectiveLabelW }) {
+function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClick, onValueChange, effectiveLabelW, isIndividual }) {
   const fs        = _gfs(config, f.key)
   const highlight = fs.highlight || false
   const pos       = _gfp(config, f.key)
@@ -495,7 +495,7 @@ function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClic
           border: isSel?`2px dashed rgba(255,255,255,.7)`:isMul?'2px dashed #f59e0b':'2px dashed transparent',
           cursor:'grab', boxShadow:isSel?`0 0 0 3px ${c1}55`:'none', transition:'border .15s' }}>
         <span
-          contentEditable
+          contentEditable={isIndividual}
           suppressContentEditableWarning
           onMouseDown={e => e.stopPropagation()}
           onFocus={e => {
@@ -514,7 +514,7 @@ function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClic
             letterSpacing:uppercase?1.5:0.2,
             textTransform:uppercase?'uppercase':'none', display:'block', fontFamily:fontFam,
             wordBreak:'break-word', overflowWrap:'break-word',
-            outline:'none', cursor:'text'
+            outline:'none', cursor: isIndividual ? 'text' : 'inherit'
           }}>
           {displayVal}
         </span>
@@ -541,7 +541,7 @@ function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClic
         {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', display:'inline-block', width:labelW, whiteSpace:'nowrap', flexShrink:0, lineHeight:1.3 }}>{f.label}</span>}
         {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0, lineHeight:1.3 }}>:</span>}
         <span
-          contentEditable
+          contentEditable={isIndividual}
           suppressContentEditableWarning
           onMouseDown={e => e.stopPropagation()}
           onFocus={e => {
@@ -559,7 +559,7 @@ function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClic
           style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
             textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
             wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
-            flex:1, outline:'none', cursor:'text'
+            flex:1, outline:'none', cursor: isIndividual ? 'text' : 'inherit'
           }}>{displayVal}</span>
       </div>
       {isSel && (
@@ -574,7 +574,7 @@ function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClic
 /* ══════════════════════════════════════════════════════════
    CARD CANVAS
 ══════════════════════════════════════════════════════════ */
-function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSelected, onMultiSelect, onValueChange }) {
+function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSelected, onMultiSelect, onValueChange, isIndividual }) {
   const dragRef   = useRef(null)
   const [guides,  setGuides]  = useState([])
   const isDragging = useRef(false)
@@ -700,26 +700,26 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
           </div>
           <div style={{ textAlign:config.logoPosition==='center'?'center':'left' }}>
             <div
-              contentEditable
+              contentEditable={isIndividual}
               suppressContentEditableWarning
               onMouseDown={e => e.stopPropagation()}
               onBlur={e => {
                 if (onValueChange) onValueChange('school_name', e.currentTarget.textContent.trim())
               }}
               onKeyDown={e => { if (e.key==='Enter') { e.preventDefault(); e.currentTarget.blur() } }}
-              style={{ fontFamily:'Outfit,sans-serif', fontSize:12, fontWeight:800, color:'#fff', lineHeight:1.3, outline:'none', cursor:'text' }}>
+              style={{ fontFamily:'Outfit,sans-serif', fontSize:12, fontWeight:800, color:'#fff', lineHeight:1.3, outline:'none', cursor: isIndividual ? 'text' : 'inherit' }}>
               {sub?.school_name || orgName || 'Organization Name'}
             </div>
             <div style={{ fontSize:9, color:'rgba(255,255,255,.75)', marginTop:2, display:'flex', alignItems:'center', justifyContent:config.logoPosition==='center'?'center':'flex-start' }}>
               <span
-                contentEditable
+                contentEditable={isIndividual}
                 suppressContentEditableWarning
                 onMouseDown={e => e.stopPropagation()}
                 onBlur={e => {
                   if (onValueChange) onValueChange('role', e.currentTarget.textContent.trim())
                 }}
                 onKeyDown={e => { if (e.key==='Enter') { e.preventDefault(); e.currentTarget.blur() } }}
-                style={{ fontWeight:700, outline:'none', cursor:'text' }}>
+                style={{ fontWeight:700, outline:'none', cursor: isIndividual ? 'text' : 'inherit' }}>
                 {sub?.role || 'Student'}
               </span>
               <span style={{ marginLeft:4 }}>Identity Card</span>
@@ -758,6 +758,8 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
               effectiveLabelW={effectiveLabelW}
               onMouseDown={e => startDrag(e, f.key, pos.x, pos.y)}
               onClick={e => { e.stopPropagation(); if (e.shiftKey && onMultiSelect) onMultiSelect(f.key) }}
+              onValueChange={onValueChange}
+              isIndividual={isIndividual}
             />
           )
         })
@@ -768,7 +770,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
         const fSize    = config.fontSize || 11
         const lSize    = Math.max(fSize - 1, 7)
         const lw       = effectiveLabelW
-        const rowGap   = config.rowGap || 22
+        const rowGap   = config.rowGap ?? 22
         const align    = config.fieldAlign || 'left'
         const headerH  = config.showHeader !== false ? (config.orientation === 'landscape' ? 64 : 80) : 0
         const pw       = config.photoSize || 72
@@ -832,7 +834,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                     }}>
                     <div style={{ display:'flex', flex:1, flexWrap:'wrap', gap:6, justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start' }}>
                       <span
-                        contentEditable
+                        contentEditable={isIndividual}
                         suppressContentEditableWarning
                         onMouseDown={e => e.stopPropagation()}
                         onFocus={e => {
@@ -851,7 +853,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                           fontSize: ffSize, fontWeight: ffWeight, color: textColor,
                           letterSpacing: uppercase ? 1.5 : 0.2, textTransform: uppercase ? 'uppercase' : 'none',
                           fontFamily: fontFam,
-                          outline: 'none', cursor: 'text'
+                          outline: 'none', cursor: isIndividual ? 'text' : 'default'
                         }}>{displayVal}</span>
 
                       {f.key === 'class' && hasSection && (() => {
@@ -865,7 +867,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                         return (
                           <span
                             onClick={e => { e.stopPropagation(); onSelect('section') }}
-                            contentEditable
+                            contentEditable={isIndividual}
                             suppressContentEditableWarning
                             onMouseDown={e => e.stopPropagation()}
                             onFocus={e => {
@@ -882,7 +884,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                               fontSize: ffSize, fontWeight: ffWeight, color: textColor,
                               letterSpacing: uppercase ? 1.5 : 0.2, textTransform: uppercase ? 'uppercase' : 'none',
                               fontFamily: fontFam,
-                              outline: 'none', cursor: 'text',
+                              outline: 'none', cursor: isIndividual ? 'text' : 'default',
                               padding: '0 2px',
                               border: secIsSel ? `1.5px dashed rgba(255,255,255,.7)` : '2px dashed transparent',
                               background: secIsSel ? `${config.c1}09` : 'transparent',
@@ -916,7 +918,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                   {showLabel && <span style={{ fontSize: lSize, fontWeight: 700, color: '#555', margin: '0 4px 0 0', flexShrink: 0, lineHeight: 1.3 }}>:</span>}
                   <div style={{ display:'flex', flex:1, flexWrap:'wrap', gap:6 }}>
                     <span
-                      contentEditable
+                      contentEditable={isIndividual}
                       suppressContentEditableWarning
                       onMouseDown={e => e.stopPropagation()}
                       onFocus={e => {
@@ -936,7 +938,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                         lineHeight: 1.3,
                         textTransform: uppercase ? 'uppercase' : 'none',
                         fontFamily: fontFam,
-                        outline: 'none', cursor: 'text'
+                        outline: 'none', cursor: isIndividual ? 'text' : 'default'
                       }}>{displayVal}</span>
 
                     {f.key === 'class' && hasSection && (() => {
@@ -950,7 +952,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                       return (
                         <span
                           onClick={e => { e.stopPropagation(); onSelect('section') }}
-                          contentEditable
+                          contentEditable={isIndividual}
                           suppressContentEditableWarning
                           onMouseDown={e => e.stopPropagation()}
                           onFocus={e => {
@@ -968,7 +970,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                             lineHeight: 1.3,
                             textTransform: uppercase ? 'uppercase' : 'none',
                             fontFamily: fontFam,
-                            outline: 'none', cursor: 'text',
+                            outline: 'none', cursor: isIndividual ? 'text' : 'default',
                             padding: '0 2px',
                             border: secIsSel ? `1.5px dashed ${config.c1}` : '1.5px dashed transparent',
                             background: secIsSel ? `${config.c1}09` : 'transparent',
@@ -2346,15 +2348,17 @@ export default function IDCardBuilder() {
                       <span style={{ fontSize:11, color:'var(--ink3)', fontWeight:600 }}>Colon Position</span>
                       <div style={{ display:'flex', alignItems:'center', gap:4 }}>
                         <input type="text" inputMode="numeric" pattern="[0-9]*"
-                          value={labelWidthDraft ?? String(config.labelWidth||90)}
+                          value={labelWidthDraft ?? String(config.labelWidth ?? 72)}
                           onChange={e => {
                             const raw = e.target.value.replace(/[^0-9]/g, '')
                             setLabelWidthDraft(raw)
                             if (raw !== '') upd('labelWidth', Number(raw))
                           }}
-                          onBlur={e => {
-                            const clamped = Math.min(250, Math.max(20, Number(e.target.value)||90))
-                            upd('labelWidth', clamped)
+                          onBlur={() => {
+                            if (labelWidthDraft !== null) {
+                              const clamped = Math.min(250, Math.max(20, Number(labelWidthDraft) || 72))
+                              upd('labelWidth', clamped)
+                            }
                             setLabelWidthDraft(null)
                           }}
                           onKeyDown={e => { if (e.key==='Enter') e.target.blur() }}
@@ -2363,7 +2367,7 @@ export default function IDCardBuilder() {
                       </div>
                     </div>
                     <input type="range" min={20} max={250} step={1}
-                      value={config.labelWidth||90}
+                      value={config.labelWidth ?? 72}
                       onChange={e => { upd('labelWidth', Number(e.target.value)); setLabelWidthDraft(null) }}
                       style={{ width:'100%', accentColor:'#2352ff' }}/>
                   </div>
@@ -2374,15 +2378,17 @@ export default function IDCardBuilder() {
                       <span style={{ fontSize:11, color:'var(--ink3)', fontWeight:600 }}>Row Spacing</span>
                       <div style={{ display:'flex', alignItems:'center', gap:4 }}>
                         <input type="text" inputMode="numeric" pattern="[0-9]*"
-                          value={rowGapDraft ?? String(config.rowGap||22)}
+                          value={rowGapDraft ?? String(config.rowGap ?? 22)}
                           onChange={e => {
                             const raw = e.target.value.replace(/[^0-9]/g, '')
                             setRowGapDraft(raw)
                             if (raw !== '') upd('rowGap', Number(raw))
                           }}
-                          onBlur={e => {
-                            const clamped = Math.min(80, Math.max(5, Number(e.target.value)||22))
-                            upd('rowGap', clamped)
+                          onBlur={() => {
+                            if (rowGapDraft !== null) {
+                              const clamped = Math.min(80, Math.max(0, Number(rowGapDraft) || 22))
+                              upd('rowGap', clamped)
+                            }
                             setRowGapDraft(null)
                           }}
                           onKeyDown={e => { if (e.key==='Enter') e.target.blur() }}
@@ -2390,8 +2396,8 @@ export default function IDCardBuilder() {
                         <span style={{ fontSize:10, color:'var(--ink3)' }}>px</span>
                       </div>
                     </div>
-                    <input type="range" min={5} max={80} step={1}
-                      value={config.rowGap||22}
+                    <input type="range" min={0} max={80} step={1}
+                      value={config.rowGap ?? 22}
                       onChange={e => { upd('rowGap', Number(e.target.value)); setRowGapDraft(null) }}
                       style={{ width:'100%', accentColor:'#2352ff' }}/>
                   </div>
@@ -2779,6 +2785,7 @@ export default function IDCardBuilder() {
               multiSelected={multiSelected}
               onMultiSelect={handleMultiSelect}
               onValueChange={handleValueChange}
+              isIndividual={!!subId}
             />
           </div>
 

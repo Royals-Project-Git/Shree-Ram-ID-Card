@@ -383,7 +383,7 @@ const IDCard = forwardRef(function IDCard(
 
             const lw      = effectiveLabelW
 
-            const rowGap  = c.rowGap || 22
+            const rowGap  = c.rowGap ?? 22
             const align   = c.fieldAlign || 'left'
             const headerH = c.showHeader !== false ? (CW > CH ? 64 : 80) : 0
             const pw      = c.photoSize || 72
