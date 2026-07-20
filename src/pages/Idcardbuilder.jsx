@@ -230,7 +230,7 @@ const DEFAULT_CONFIG = {
   fieldPositions:{}, photoX:16, photoY:90, photoSize:72,
   layoutMode:'drag',     // 'drag' | 'flow'
   fieldAlign:'left',     // 'left' | 'center' | 'right'  (flow mode)
-  labelWidth:90,         // px — fixed label column width  (flow mode)
+  labelWidth:72,         // px — fixed label column width  (flow mode)
   rowGap:22,             // px between rows               (flow mode)
   flowStartY:null,       // null = auto (below photo)     (flow mode)
   flowStartX:null,       // null = auto (margin)          (flow mode)
@@ -407,7 +407,7 @@ function getShiftedFields(fields, config, sub, CW) {
       const highlight  = fs.highlight || false
       const fSize      = fs.fontSize ?? (config.fontSize || 11)
       const showLabel  = fs.showLabel !== false
-      const labelW     = config.labelWidth || 90
+      const labelW     = config.labelWidth || 72
       const isUppercase = fs.uppercase || false
       const fontWeight  = fs.fontWeight ?? (highlight ? 700 : 600)
       // Uppercase & bold text renders wider per character
@@ -671,8 +671,8 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
       _maxLabelLen = f.label.length
     }
   })
-  const _minLwNeeded = Math.ceil(_maxLabelLen * _lSize * 0.72) + 6
-  const effectiveLabelW = Math.max(config.labelWidth || 90, _minLwNeeded)
+  const _minLwNeeded = Math.ceil(_maxLabelLen * _lSize * 0.52) + 6
+  const effectiveLabelW = Math.max(config.labelWidth || 72, _minLwNeeded)
 
   const cardRadius = config.cornerStyle === 'sharp' ? 0 : 16
 

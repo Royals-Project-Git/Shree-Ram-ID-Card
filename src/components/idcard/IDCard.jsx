@@ -221,8 +221,8 @@ const IDCard = forwardRef(function IDCard(
         _maxLabelLen = f.label.length
       }
     })
-    const _minLwNeeded = Math.ceil(_maxLabelLen * _lSize * 0.72) + 6
-    const effectiveLabelW = Math.max(c.labelWidth || 90, _minLwNeeded)
+    const _minLwNeeded = Math.ceil(_maxLabelLen * _lSize * 0.52) + 6
+    const effectiveLabelW = Math.max(c.labelWidth || 72, _minLwNeeded)
 
     const getPos = (key) =>
       c.fieldPositions?.[key] || DEFAULT_POSITIONS[key] || { x: 20, y: 200 }
