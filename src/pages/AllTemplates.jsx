@@ -727,6 +727,8 @@ export default function AllTemplates() {
   /* ── Render one card off-screen and capture it ───────────── */
   // Convert any URL to a base64 data URL by fetching through a proxy approach
   const urlToBase64 = async (url) => {
+    if (!url || typeof url !== 'string') return null
+    if (url.startsWith('data:')) return url
     try {
       // Try fetching with CORS first
       const res = await fetch(url, { mode: 'cors', cache: 'no-cache' })
@@ -770,6 +772,9 @@ export default function AllTemplates() {
     const patchedSub = {
       ...sub,
       photo_url: photoBase64 || sub.photo_url,
+      customConfig: sub.customConfig
+        ? { ...sub.customConfig, bgImage: bgBase64 || sub.customConfig.bgImage }
+        : undefined
     }
     const patchedLogo   = logoBase64 || orgLogo
     const patchedConfig = activeConfig

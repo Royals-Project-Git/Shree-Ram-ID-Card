@@ -8,7 +8,7 @@ const ALL_FIELDS = ['Name','FathersName','ClassN','Section','DateofBirth','Admis
 const ICONS = {Name:'👤',FathersName:'👨',ClassN:'🏫',Section:'📌',DateofBirth:'🎂',AdmissionNumber:'🔢',RollNumber:'🎯',EmployeeID:'🪪',ContactNumber:'📱',EmergencyContact:'🚨',BloodGroup:'🩸',UploadYourPhoto:'📷',Address:'📍',ModeOfTransportation:'🚌',Designation:'💼',AadhaarNumber:'🪪',Department:'🏢',EmailId:'✉️',ValidFrom:'📅',ValidTill:'📅',BatchTiming:'⏰'}
 
 const FIELD_LABELS = {
-  Name: 'Full Name',
+  Name: 'Name',
   FathersName: "Father's Name",
   ClassN: 'Class',
   Section: 'Section',
