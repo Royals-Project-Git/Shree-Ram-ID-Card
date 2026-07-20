@@ -211,6 +211,19 @@ const IDCard = forwardRef(function IDCard(
       .map(key => ALL_FIELDS.find(f => f.key === key))
       .filter(Boolean)
 
+    /* ── Compute effective label width: max of config setting and longest visible label ── */
+    const _fSize = c.fontSize || 11
+    const _lSize = Math.max(_fSize - 1, 7)
+    let _maxLabelLen = 0
+    visibleFields.forEach(f => {
+      const fs = c.fieldStyles?.[f.key] || {}
+      if (fs.showLabel !== false && f.label && f.label.length > _maxLabelLen) {
+        _maxLabelLen = f.label.length
+      }
+    })
+    const _minLwNeeded = Math.ceil(_maxLabelLen * _lSize * 0.72) + 6
+    const effectiveLabelW = Math.max(c.labelWidth || 90, _minLwNeeded)
+
     const getPos = (key) =>
       c.fieldPositions?.[key] || DEFAULT_POSITIONS[key] || { x: 20, y: 200 }
 
@@ -340,7 +353,7 @@ const IDCard = forwardRef(function IDCard(
                 )
               }
 
-              const labelW = c.labelWidth || 72
+              const labelW = effectiveLabelW
 
               return (
                 <div key={f.key} style={{
@@ -349,7 +362,7 @@ const IDCard = forwardRef(function IDCard(
                   padding:'2px 6px', zIndex:8,
                   display:'flex', alignItems:'flex-start', gap:0,
                 }}>
-                  {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', whiteSpace:'nowrap', display:'inline-block', minWidth:labelW, lineHeight:1.3 }}>{f.label}</span>}
+                  {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', display:'inline-block', width:labelW, whiteSpace:'nowrap', flexShrink:0, lineHeight:1.3 }}>{f.label}</span>}
                   {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0, lineHeight:1.3 }}>:</span>}
                   <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
                     textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
@@ -360,11 +373,16 @@ const IDCard = forwardRef(function IDCard(
             })
           })()}
 
-          {/* Fields — FLOW mode: 2-column layout */}
           {c.layoutMode === 'flow' && (() => {
             const fSize   = c.fontSize || 11
             const lSize   = Math.max(fSize - 1, 7)
-            const lw      = c.labelWidth || 72
+
+            const present = visibleFields.filter(f => sub[f.key])
+            const hasClass = present.some(f => f.key === 'class')
+            const hasSection = present.some(f => f.key === 'section')
+
+            const lw      = effectiveLabelW
+
             const rowGap  = c.rowGap || 22
             const align   = c.fieldAlign || 'left'
             const headerH = c.showHeader !== false ? (CW > CH ? 64 : 80) : 0
@@ -379,60 +397,7 @@ const IDCard = forwardRef(function IDCard(
             const startX  = c.flowStartX ?? autoStartX
             const availW  = CW - startX - 12
 
-            const present = visibleFields.filter(f => sub[f.key])
 
-            // Build layout rows: each row = { fields: [...], isFullWidth: bool }
-            const rows = []
-            const processed = new Set()
-
-            present.forEach((f) => {
-              if (processed.has(f.key)) return
-
-              if (f.key === 'class') {
-                const sectionField = present.find(pf => pf.key === 'section')
-                if (sectionField) {
-                  rows.push({ fields: [f, sectionField], isFullWidth: false })
-                  processed.add('class')
-                  processed.add('section')
-                } else {
-                  rows.push({ fields: [f], isFullWidth: true })
-                  processed.add('class')
-                }
-              } else if (f.key === 'section') {
-                const classField = present.find(pf => pf.key === 'class')
-                if (classField) {
-                  rows.push({ fields: [classField, f], isFullWidth: false })
-                  processed.add('class')
-                  processed.add('section')
-                } else {
-                  rows.push({ fields: [f], isFullWidth: true })
-                  processed.add('section')
-                }
-              } else if (f.key === 'blood_group') {
-                const admField = present.find(pf => pf.key === 'admission_number')
-                if (admField) {
-                  rows.push({ fields: [f, admField], isFullWidth: false })
-                  processed.add('blood_group')
-                  processed.add('admission_number')
-                } else {
-                  rows.push({ fields: [f], isFullWidth: true })
-                  processed.add('blood_group')
-                }
-              } else if (f.key === 'admission_number') {
-                const bgField = present.find(pf => pf.key === 'blood_group')
-                if (bgField) {
-                  rows.push({ fields: [bgField, f], isFullWidth: false })
-                  processed.add('blood_group')
-                  processed.add('admission_number')
-                } else {
-                  rows.push({ fields: [f], isFullWidth: true })
-                  processed.add('admission_number')
-                }
-              } else {
-                rows.push({ fields: [f], isFullWidth: true })
-                processed.add(f.key)
-              }
-            })
 
             return (
               <div style={{
@@ -445,75 +410,104 @@ const IDCard = forwardRef(function IDCard(
                 gap: rowGap,
                 zIndex: 8,
               }}>
-                {rows.map((row, rowIdx) => (
-                  <div key={rowIdx} style={{
-                    display: 'flex',
-                    gap: 4,
-                    width: '100%',
-                  }}>
-                    {row.fields.map((f) => {
-                      const rawVal    = sub[f.key]
-                      const val       = f.key === 'date_of_birth' ? formatDOB(rawVal) : rawVal
-                      const fs        = c.fieldStyles?.[f.key] || {}
-                      const highlight = fs.highlight || false
-                      const ffSize    = fs.fontSize  ?? fSize
-                      const ffWeight  = fs.fontWeight ?? (highlight ? 700 : 600)
-                      const textColor = fs.textColor  || (highlight ? '#fff' : '#1a1a2e')
-                      const bgColor   = fs.bgColor    || c1
-                      const uppercase = fs.uppercase  || false
-                      const showLabel = fs.showLabel  !== false
-                      const brad      = fs.borderRadius ?? 4
-                      const fontFam   = fs.fontFamily  || c.globalFontFamily || 'Instrument Sans,sans-serif'
-                      const displayVal = uppercase ? (val||'').toUpperCase() : val
-                      const fieldLW    = row.isFullWidth ? lw : Math.min(lw, Math.floor(availW * 0.5 * 0.45))
+                {present.map((f) => {
+                  if (f.key === 'section' && hasClass) {
+                    return null // Rendered inline with class instead
+                  }
+                  const rawVal    = sub[f.key]
+                  const val       = f.key === 'date_of_birth' ? formatDOB(rawVal) : rawVal
+                  const fs        = c.fieldStyles?.[f.key] || {}
+                  const highlight = fs.highlight || false
+                  const ffSize    = fs.fontSize  ?? fSize
+                  const ffWeight  = fs.fontWeight ?? (highlight ? 700 : 600)
+                  const textColor = fs.textColor  || (highlight ? '#fff' : '#1a1a2e')
+                  const bgColor   = fs.bgColor    || c1
+                  const uppercase = fs.uppercase  || false
+                  const showLabel = fs.showLabel  !== false
+                  const brad      = fs.borderRadius ?? 4
+                  const fontFam   = fs.fontFamily  || c.globalFontFamily || 'Instrument Sans,sans-serif'
+                  const displayVal = uppercase ? (val||'').toUpperCase() : val
 
-                      if (highlight) {
-                        return (
-                          <div key={f.key} style={{
-                            flex: row.isFullWidth ? '1 1 100%' : '1 1 50%',
-                            minWidth: 0,
-                            background: bgColor, borderRadius: brad,
-                            padding:'3px 8px', display:'flex',
-                            alignItems:'center',
-                            justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
-                          }}>
-                            <span style={{ fontSize:ffSize, fontWeight:ffWeight, color:textColor,
-                              letterSpacing:uppercase?1.5:0.2,
-                              textTransform:uppercase?'uppercase':'none', display:'block', fontFamily:fontFam,
-                              wordBreak:'break-word', overflowWrap:'break-word',
-                              textAlign: align === 'center' ? 'center' : align === 'right' ? 'right' : 'left',
-                            }}>
-                              {displayVal}
-                            </span>
-                          </div>
-                        )
-                      }
-
-                      return (
-                        <div key={f.key} style={{
-                          flex: row.isFullWidth ? '1 1 100%' : '1 1 50%',
-                          minWidth: 0,
-                          padding:'2px 6px',
-                          display:'flex', alignItems:'flex-start', gap:0,
-                          justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
-                        }}>
-                          {showLabel && <span style={{
-                            fontSize:lSize, fontWeight:700, color:'#333',
-                            width:fieldLW, minWidth:fieldLW, flexShrink: 0, whiteSpace:'nowrap',
-                            textAlign: align === 'right' ? 'right' : 'left',
-                            lineHeight:1.3,
-                          }}>{f.label}</span>}
-                          {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 4px 0 0', flexShrink:0, lineHeight:1.3 }}>:</span>}
+                  if (highlight) {
+                    return (
+                      <div key={f.key} style={{
+                        width: '100%',
+                        minWidth: 0,
+                        background: bgColor, borderRadius: brad,
+                        padding:'3px 8px', display:'flex',
+                        alignItems:'center',
+                        justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
+                      }}>
+                        <div style={{ display:'flex', flex:1, flexWrap:'wrap', gap:6, justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start' }}>
                           <span style={{ fontSize:ffSize, fontWeight:ffWeight, color:textColor,
+                            letterSpacing:uppercase?1.5:0.2,
                             textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
-                            wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
-                            textAlign: align === 'right' ? 'right' : 'left',
-                          }}>{displayVal}</span>
+                            wordBreak:'break-word', overflowWrap:'break-word',
+                            whiteSpace:'normal',
+                          }}>
+                            {displayVal}
+                          </span>
+
+                          {f.key === 'class' && hasSection && (() => {
+                            const secRawVal = sub['section']
+                            if (!secRawVal) return null
+                            const secDisplayVal = uppercase ? secRawVal.toUpperCase() : secRawVal
+                            return (
+                              <span style={{ fontSize:ffSize, fontWeight:ffWeight, color:textColor,
+                                letterSpacing:uppercase?1.5:0.2,
+                                textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
+                                wordBreak:'break-word', overflowWrap:'break-word',
+                                whiteSpace:'normal',
+                              }}>
+                                {secDisplayVal}
+                              </span>
+                            )
+                          })()}
                         </div>
-                      )
-                    })}
-                  </div>
-                ))}
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div key={f.key} style={{
+                      width: '100%',
+                      minWidth: 0,
+                      padding:'2px 6px',
+                      display:'flex', alignItems:'flex-start', gap:0,
+                      justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
+                    }}>
+                      {showLabel && <span style={{
+                        fontSize:lSize, fontWeight:700, color:'#333',
+                        width:lw, minWidth:lw, flexShrink: 0, whiteSpace:'nowrap',
+                        textAlign: align === 'right' ? 'right' : 'left',
+                        lineHeight:1.3,
+                      }}>{f.label}</span>}
+                      {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 4px 0 0', flexShrink:0, lineHeight:1.3 }}>:</span>}
+                      <div style={{ display:'flex', flex:1, flexWrap:'wrap', gap:6, justifyContent: align === 'right' ? 'flex-end' : 'flex-start' }}>
+                        <span style={{ fontSize:ffSize, fontWeight:ffWeight, color:textColor,
+                          textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
+                          wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
+                          whiteSpace:'normal',
+                          textAlign: align === 'right' ? 'right' : 'left',
+                        }}>{displayVal}</span>
+
+                        {f.key === 'class' && hasSection && (() => {
+                          const secRawVal = sub['section']
+                          if (!secRawVal) return null
+                          const secDisplayVal = uppercase ? secRawVal.toUpperCase() : secRawVal
+                          return (
+                            <span style={{ fontSize:ffSize, fontWeight:ffWeight, color:textColor,
+                              textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
+                              wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
+                              whiteSpace:'normal',
+                              textAlign: align === 'right' ? 'right' : 'left',
+                            }}>{secDisplayVal}</span>
+                          )
+                        })()}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )
           })()}

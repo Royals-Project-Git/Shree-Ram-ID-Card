@@ -230,7 +230,7 @@ const DEFAULT_CONFIG = {
   fieldPositions:{}, photoX:16, photoY:90, photoSize:72,
   layoutMode:'drag',     // 'drag' | 'flow'
   fieldAlign:'left',     // 'left' | 'center' | 'right'  (flow mode)
-  labelWidth:72,         // px — fixed label column width  (flow mode)
+  labelWidth:90,         // px — fixed label column width  (flow mode)
   rowGap:22,             // px between rows               (flow mode)
   flowStartY:null,       // null = auto (below photo)     (flow mode)
   flowStartX:null,       // null = auto (margin)          (flow mode)
@@ -407,7 +407,7 @@ function getShiftedFields(fields, config, sub, CW) {
       const highlight  = fs.highlight || false
       const fSize      = fs.fontSize ?? (config.fontSize || 11)
       const showLabel  = fs.showLabel !== false
-      const labelW     = config.labelWidth || 72
+      const labelW     = config.labelWidth || 90
       const isUppercase = fs.uppercase || false
       const fontWeight  = fs.fontWeight ?? (highlight ? 700 : 600)
       // Uppercase & bold text renders wider per character
@@ -464,7 +464,7 @@ function _gfp(config, key) {
 }
 function _gfs(config, key) { return config.fieldStyles?.[key] || {} }
 
-function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClick }) {
+function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClick, onValueChange, effectiveLabelW }) {
   const fs        = _gfs(config, f.key)
   const highlight = fs.highlight || false
   const pos       = _gfp(config, f.key)
@@ -482,8 +482,9 @@ function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClic
   const padY      = 3
   const CW = config.cardW || 340
   const fieldMaxW = CW - pos.x - 8
-  const displayVal = uppercase ? (val||'').toUpperCase() : val
   const topY = shiftedY !== undefined ? shiftedY : pos.y
+  const hasPlaceholder = !val || (typeof val === 'string' && val.startsWith('[') && val.endsWith(']'))
+  const displayVal = hasPlaceholder ? `[${f.label}]` : uppercase ? (val||'').toUpperCase() : val
 
   if (highlight) {
     return (
@@ -493,11 +494,28 @@ function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClic
           background:bgColor, borderRadius:brad, padding:`${padY}px ${padX}px`, minWidth:80,
           border: isSel?`2px dashed rgba(255,255,255,.7)`:isMul?'2px dashed #f59e0b':'2px dashed transparent',
           cursor:'grab', boxShadow:isSel?`0 0 0 3px ${c1}55`:'none', transition:'border .15s' }}>
-        <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
-          letterSpacing:uppercase?1.5:0.2,
-          textTransform:uppercase?'uppercase':'none', display:'block', fontFamily:fontFam,
-          wordBreak:'break-word', overflowWrap:'break-word',
-        }}>
+        <span
+          contentEditable
+          suppressContentEditableWarning
+          onMouseDown={e => e.stopPropagation()}
+          onFocus={e => {
+            if (hasPlaceholder) {
+              e.currentTarget.textContent = ''
+            }
+          }}
+          onBlur={e => {
+            const txt = e.currentTarget.textContent.trim()
+            if (onValueChange) {
+              onValueChange(f.key, txt === `[${f.label}]` || !txt ? '' : txt)
+            }
+          }}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+          style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
+            letterSpacing:uppercase?1.5:0.2,
+            textTransform:uppercase?'uppercase':'none', display:'block', fontFamily:fontFam,
+            wordBreak:'break-word', overflowWrap:'break-word',
+            outline:'none', cursor:'text'
+          }}>
           {displayVal}
         </span>
         {isSel && (
@@ -509,7 +527,7 @@ function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClic
     )
   }
 
-  const labelW = config.labelWidth || 72
+  const labelW = effectiveLabelW || config.labelWidth || 90
 
   return (
     <div key={f.key} onMouseDown={onMouseDown} onClick={onClick}
@@ -519,13 +537,30 @@ function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClic
         border: isSel?`1.5px dashed ${c1}`:isMul?'1.5px dashed #f59e0b':'1.5px dashed transparent',
         background: isSel?`${c1}11`:isMul?'#fef3c722':'transparent',
         cursor:'grab', transition:'border .15s, background .15s' }}>
-      <div style={{ display:'flex', alignItems:'flex-start', gap:0 }}>
-        {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', whiteSpace:'nowrap', display:'inline-block', minWidth:labelW, lineHeight:1.3 }}>{f.label}</span>}
+      <div style={{ display:'flex', alignItems:'flex-start', gap:0, width:'100%' }}>
+        {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', display:'inline-block', width:labelW, whiteSpace:'nowrap', flexShrink:0, lineHeight:1.3 }}>{f.label}</span>}
         {showLabel && <span style={{ fontSize:lSize, fontWeight:700, color:'#555', margin:'0 3px', flexShrink:0, lineHeight:1.3 }}>:</span>}
-        <span style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
-          textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
-          wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
-        }}>{displayVal}</span>
+        <span
+          contentEditable
+          suppressContentEditableWarning
+          onMouseDown={e => e.stopPropagation()}
+          onFocus={e => {
+            if (hasPlaceholder) {
+              e.currentTarget.textContent = ''
+            }
+          }}
+          onBlur={e => {
+            const txt = e.currentTarget.textContent.trim()
+            if (onValueChange) {
+              onValueChange(f.key, txt === `[${f.label}]` || !txt ? '' : txt)
+            }
+          }}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+          style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
+            textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
+            wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
+            flex:1, outline:'none', cursor:'text'
+          }}>{displayVal}</span>
       </div>
       {isSel && (
         <div style={{ position:'absolute', top:-16, left:0, fontSize:9, color:c1, fontWeight:700,
@@ -539,7 +574,7 @@ function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClic
 /* ══════════════════════════════════════════════════════════
    CARD CANVAS
 ══════════════════════════════════════════════════════════ */
-function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSelected, onMultiSelect }) {
+function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSelected, onMultiSelect, onValueChange }) {
   const dragRef   = useRef(null)
   const [guides,  setGuides]  = useState([])
   const isDragging = useRef(false)
@@ -626,6 +661,19 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
   const isPhotoSel = selected==='__photo__'
   const headerH = config.orientation==='landscape' ? 64 : 80
 
+  /* ── Compute effective label width: max of config setting and longest visible label ── */
+  const _fSize = config.fontSize || 11
+  const _lSize = Math.max(_fSize - 1, 7)
+  let _maxLabelLen = 0
+  visibleFields.forEach(f => {
+    const fs = config.fieldStyles?.[f.key] || {}
+    if (fs.showLabel !== false && f.label && f.label.length > _maxLabelLen) {
+      _maxLabelLen = f.label.length
+    }
+  })
+  const _minLwNeeded = Math.ceil(_maxLabelLen * _lSize * 0.72) + 6
+  const effectiveLabelW = Math.max(config.labelWidth || 90, _minLwNeeded)
+
   const cardRadius = config.cornerStyle === 'sharp' ? 0 : 16
 
   return (
@@ -651,10 +699,31 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
             {(orgName||sub?.school_name||'SC').slice(0,2).toUpperCase()}
           </div>
           <div style={{ textAlign:config.logoPosition==='center'?'center':'left' }}>
-            <div style={{ fontFamily:'Outfit,sans-serif', fontSize:12, fontWeight:800, color:'#fff', lineHeight:1.3 }}>
-              {orgName||sub?.school_name||'Organization Name'}
+            <div
+              contentEditable
+              suppressContentEditableWarning
+              onMouseDown={e => e.stopPropagation()}
+              onBlur={e => {
+                if (onValueChange) onValueChange('school_name', e.currentTarget.textContent.trim())
+              }}
+              onKeyDown={e => { if (e.key==='Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+              style={{ fontFamily:'Outfit,sans-serif', fontSize:12, fontWeight:800, color:'#fff', lineHeight:1.3, outline:'none', cursor:'text' }}>
+              {sub?.school_name || orgName || 'Organization Name'}
             </div>
-            <div style={{ fontSize:9, color:'rgba(255,255,255,.75)', marginTop:2 }}>{sub?.role||'Student'} Identity Card</div>
+            <div style={{ fontSize:9, color:'rgba(255,255,255,.75)', marginTop:2, display:'flex', alignItems:'center', justifyContent:config.logoPosition==='center'?'center':'flex-start' }}>
+              <span
+                contentEditable
+                suppressContentEditableWarning
+                onMouseDown={e => e.stopPropagation()}
+                onBlur={e => {
+                  if (onValueChange) onValueChange('role', e.currentTarget.textContent.trim())
+                }}
+                onKeyDown={e => { if (e.key==='Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+                style={{ fontWeight:700, outline:'none', cursor:'text' }}>
+                {sub?.role || 'Student'}
+              </span>
+              <span style={{ marginLeft:4 }}>Identity Card</span>
+            </div>
           </div>
         </div>
       )}
@@ -686,6 +755,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
           const isMul = multiSelected?.includes(f.key)
           return (
             <DragField key={f.key} f={f} config={config} val={val} isSel={isSel} isMul={isMul} shiftedY={shiftedY}
+              effectiveLabelW={effectiveLabelW}
               onMouseDown={e => startDrag(e, f.key, pos.x, pos.y)}
               onClick={e => { e.stopPropagation(); if (e.shiftKey && onMultiSelect) onMultiSelect(f.key) }}
             />
@@ -697,7 +767,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
       {config.layoutMode === 'flow' && (() => {
         const fSize    = config.fontSize || 11
         const lSize    = Math.max(fSize - 1, 7)
-        const lw       = config.labelWidth || 72
+        const lw       = effectiveLabelW
         const rowGap   = config.rowGap || 22
         const align    = config.fieldAlign || 'left'
         const headerH  = config.showHeader !== false ? (config.orientation === 'landscape' ? 64 : 80) : 0
@@ -713,59 +783,8 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
         const availW   = CW - startX - 12
 
         const present = visibleFields
-
-        // Build layout rows: each row = { fields: [...], isFullWidth: bool }
-        const rows = []
-        const processed = new Set()
-
-        present.forEach((f) => {
-          if (processed.has(f.key)) return
-
-          if (f.key === 'class') {
-            const sectionField = present.find(pf => pf.key === 'section')
-            if (sectionField) {
-              rows.push({ fields: [f, sectionField], isFullWidth: false })
-              processed.add('class')
-              processed.add('section')
-            } else {
-              rows.push({ fields: [f], isFullWidth: true })
-              processed.add('class')
-            }
-          } else if (f.key === 'section') {
-            const classField = present.find(pf => pf.key === 'class')
-            if (classField) {
-              rows.push({ fields: [classField, f], isFullWidth: false })
-              processed.add('class')
-              processed.add('section')
-            } else {
-              rows.push({ fields: [f], isFullWidth: true })
-              processed.add('section')
-            }
-          } else if (f.key === 'blood_group') {
-            const admField = present.find(pf => pf.key === 'admission_number')
-            if (admField) {
-              rows.push({ fields: [f, admField], isFullWidth: false })
-              processed.add('blood_group')
-              processed.add('admission_number')
-            } else {
-              rows.push({ fields: [f], isFullWidth: true })
-              processed.add('blood_group')
-            }
-          } else if (f.key === 'admission_number') {
-            const bgField = present.find(pf => pf.key === 'blood_group')
-            if (bgField) {
-              rows.push({ fields: [bgField, f], isFullWidth: false })
-              processed.add('blood_group')
-              processed.add('admission_number')
-            } else {
-              rows.push({ fields: [f], isFullWidth: true })
-              processed.add('admission_number')
-            }
-          } else {
-            rows.push({ fields: [f], isFullWidth: true })
-            processed.add(f.key)
-          }
-        })
+        const hasClass = present.some(f => f.key === 'class')
+        const hasSection = present.some(f => f.key === 'section')
 
         return (
           <div style={{
@@ -778,84 +797,190 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
             gap: rowGap,
             zIndex: 8,
           }}>
-            {rows.map((row, rowIdx) => (
-              <div key={rowIdx} style={{
-                display: 'flex',
-                gap: 4,
-                width: '100%',
-              }}>
-                {row.fields.map((f) => {
-                  const val       = sub?.[f.key] || `[${f.label}]`
-                  const isSel     = selected === f.key
-                  const fs        = config.fieldStyles?.[f.key] || {}
-                  const highlight = fs.highlight || false
-                  const ffSize    = fs.fontSize  ?? fSize
-                  const ffWeight  = fs.fontWeight ?? (highlight ? 700 : 600)
-                  const textColor = fs.textColor  || (highlight ? '#fff' : '#1a1a2e')
-                  const bgColor   = fs.bgColor    || (config.c1 || '#2352ff')
-                  const uppercase = fs.uppercase  || false
-                  const showLabel = fs.showLabel  !== false
-                  const brad      = fs.borderRadius ?? 4
-                  const fontFam   = fs.fontFamily  || config.globalFontFamily || 'Instrument Sans'
-                  const displayVal = uppercase ? (val||'').toUpperCase() : val
-                  const fieldLW    = row.isFullWidth ? lw : Math.min(lw, Math.floor(availW * 0.5 * 0.45))
+            {present.map((f) => {
+              if (f.key === 'section' && hasClass) {
+                return null // Rendered inline with class instead
+              }
+              const rawVal    = sub?.[f.key]
+              const hasPlaceholder = !rawVal || (typeof rawVal === 'string' && rawVal.startsWith('[') && rawVal.endsWith(']'))
+              const val       = hasPlaceholder ? `[${f.label}]` : f.key === 'date_of_birth' ? formatDOB(rawVal) : rawVal
+              const isSel     = selected === f.key
+              const fs        = config.fieldStyles?.[f.key] || {}
+              const highlight = fs.highlight || false
+              const ffSize    = fs.fontSize  ?? fSize
+              const ffWeight  = fs.fontWeight ?? (highlight ? 700 : 600)
+              const textColor = fs.textColor  || (highlight ? '#fff' : '#1a1a2e')
+              const bgColor   = fs.bgColor    || (config.c1 || '#2352ff')
+              const uppercase = fs.uppercase  || false
+              const showLabel = fs.showLabel  !== false
+              const brad      = fs.borderRadius ?? 4
+              const fontFam   = fs.fontFamily  || config.globalFontFamily || 'Instrument Sans'
+              const displayVal = uppercase ? (val||'').toUpperCase() : val
 
-                  if (highlight) {
-                    return (
-                      <div key={f.key}
-                        onClick={e => { e.stopPropagation(); onSelect(f.key) }}
+              if (highlight) {
+                return (
+                  <div key={f.key}
+                    onClick={e => { e.stopPropagation(); onSelect(f.key) }}
+                    style={{
+                      width: '100%',
+                      minWidth: 0,
+                      display: 'flex', alignItems: 'center',
+                      background: bgColor, borderRadius: brad, padding: '3px 8px',
+                      border: isSel ? `2px dashed rgba(255,255,255,.7)` : '2px dashed transparent',
+                      cursor: 'default',
+                      justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
+                    }}>
+                    <div style={{ display:'flex', flex:1, flexWrap:'wrap', gap:6, justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start' }}>
+                      <span
+                        contentEditable
+                        suppressContentEditableWarning
+                        onMouseDown={e => e.stopPropagation()}
+                        onFocus={e => {
+                          if (hasPlaceholder) {
+                            e.currentTarget.textContent = ''
+                          }
+                        }}
+                        onBlur={e => {
+                          const txt = e.currentTarget.textContent.trim()
+                          if (onValueChange) {
+                            onValueChange(f.key, txt === `[${f.label}]` || !txt ? '' : txt)
+                          }
+                        }}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
                         style={{
-                          flex: row.isFullWidth ? '1 1 100%' : '1 1 50%',
-                          minWidth: 0,
-                          display: 'flex', alignItems: 'center',
-                          background: bgColor, borderRadius: brad, padding: '3px 8px',
-                          border: isSel ? `2px dashed rgba(255,255,255,.7)` : '2px dashed transparent',
-                          cursor: 'default',
-                          justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
-                        }}>
-                        <span style={{
                           fontSize: ffSize, fontWeight: ffWeight, color: textColor,
                           letterSpacing: uppercase ? 1.5 : 0.2, textTransform: uppercase ? 'uppercase' : 'none',
-                          flex: 1, minWidth: 0, wordBreak: 'break-word', overflowWrap: 'break-word',
-                          textAlign: align === 'center' ? 'center' : align === 'right' ? 'right' : 'left',
                           fontFamily: fontFam,
+                          outline: 'none', cursor: 'text'
                         }}>{displayVal}</span>
-                      </div>
-                    )
-                  }
 
-                  return (
-                    <div key={f.key}
-                      onClick={e => { e.stopPropagation(); onSelect(f.key) }}
+                      {f.key === 'class' && hasSection && (() => {
+                        const secField = present.find(pf => pf.key === 'section')
+                        const secRawVal = sub?.['section']
+                        const secHasPlaceholder = !secRawVal || (typeof secRawVal === 'string' && secRawVal.startsWith('[') && secRawVal.endsWith(']'))
+                        const secVal = secHasPlaceholder ? `[${secField.label}]` : secRawVal
+                        const secDisplayVal = uppercase ? (secVal||'').toUpperCase() : secVal
+                        const secIsSel = selected === 'section'
+                        
+                        return (
+                          <span
+                            onClick={e => { e.stopPropagation(); onSelect('section') }}
+                            contentEditable
+                            suppressContentEditableWarning
+                            onMouseDown={e => e.stopPropagation()}
+                            onFocus={e => {
+                              if (secHasPlaceholder) e.currentTarget.textContent = ''
+                            }}
+                            onBlur={e => {
+                              const txt = e.currentTarget.textContent.trim()
+                              if (onValueChange) {
+                                onValueChange('section', txt === `[${secField.label}]` || !txt ? '' : txt)
+                              }
+                            }}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+                            style={{
+                              fontSize: ffSize, fontWeight: ffWeight, color: textColor,
+                              letterSpacing: uppercase ? 1.5 : 0.2, textTransform: uppercase ? 'uppercase' : 'none',
+                              fontFamily: fontFam,
+                              outline: 'none', cursor: 'text',
+                              padding: '0 2px',
+                              border: secIsSel ? `1.5px dashed rgba(255,255,255,.7)` : '2px dashed transparent',
+                              background: secIsSel ? `${config.c1}09` : 'transparent',
+                              borderRadius: 3
+                            }}>{secDisplayVal}</span>
+                        )
+                      })()}
+                    </div>
+                  </div>
+                )
+              }
+
+              return (
+                <div key={f.key}
+                  onClick={e => { e.stopPropagation(); onSelect(f.key) }}
+                  style={{
+                    width: '100%',
+                    minWidth: 0,
+                    display: 'flex', alignItems: 'flex-start',
+                    border: isSel ? `1.5px dashed ${config.c1}` : '1.5px dashed transparent',
+                    background: isSel ? `${config.c1}09` : 'transparent',
+                    borderRadius: 4, padding: '1px 4px', cursor: 'default',
+                    justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
+                  }}>
+                  {showLabel && <span style={{
+                    fontSize: lSize, fontWeight: 700, color: '#333',
+                    width: lw, flexShrink: 0, whiteSpace: 'nowrap',
+                    textAlign: align === 'right' ? 'right' : 'left',
+                    lineHeight: 1.3,
+                  }}>{f.label}</span>}
+                  {showLabel && <span style={{ fontSize: lSize, fontWeight: 700, color: '#555', margin: '0 4px 0 0', flexShrink: 0, lineHeight: 1.3 }}>:</span>}
+                  <div style={{ display:'flex', flex:1, flexWrap:'wrap', gap:6 }}>
+                    <span
+                      contentEditable
+                      suppressContentEditableWarning
+                      onMouseDown={e => e.stopPropagation()}
+                      onFocus={e => {
+                        if (hasPlaceholder) {
+                          e.currentTarget.textContent = ''
+                        }
+                      }}
+                      onBlur={e => {
+                        const txt = e.currentTarget.textContent.trim()
+                        if (onValueChange) {
+                          onValueChange(f.key, txt === `[${f.label}]` || !txt ? '' : txt)
+                        }
+                      }}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
                       style={{
-                        flex: row.isFullWidth ? '1 1 100%' : '1 1 50%',
-                        minWidth: 0,
-                        display: 'flex', alignItems: 'flex-start',
-                        border: isSel ? `1.5px dashed ${config.c1}` : '1.5px dashed transparent',
-                        background: isSel ? `${config.c1}09` : 'transparent',
-                        borderRadius: 4, padding: '1px 4px', cursor: 'default',
-                        justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
-                      }}>
-                      {showLabel && <span style={{
-                        fontSize: lSize, fontWeight: 700, color: '#333',
-                        width: fieldLW, minWidth: fieldLW, flexShrink: 0, whiteSpace: 'nowrap',
-                        textAlign: align === 'right' ? 'right' : 'left',
-                        lineHeight: 1.3,
-                      }}>{f.label}</span>}
-                      {showLabel && <span style={{ fontSize: lSize, fontWeight: 700, color: '#555', margin: '0 4px 0 0', flexShrink: 0, lineHeight: 1.3 }}>:</span>}
-                      <span style={{
                         fontSize: ffSize, fontWeight: ffWeight, color: textColor,
-                        flex: 1, minWidth: 0, wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: 1.3,
-                        textAlign: align === 'right' ? 'right' : 'left',
+                        lineHeight: 1.3,
                         textTransform: uppercase ? 'uppercase' : 'none',
                         fontFamily: fontFam,
+                        outline: 'none', cursor: 'text'
                       }}>{displayVal}</span>
-                    </div>
-                  )
-                }
-                )}
-              </div>
-            ))}
+
+                    {f.key === 'class' && hasSection && (() => {
+                      const secField = present.find(pf => pf.key === 'section')
+                      const secRawVal = sub?.['section']
+                      const secHasPlaceholder = !secRawVal || (typeof secRawVal === 'string' && secRawVal.startsWith('[') && secRawVal.endsWith(']'))
+                      const secVal = secHasPlaceholder ? `[${secField.label}]` : secRawVal
+                      const secDisplayVal = uppercase ? (secVal||'').toUpperCase() : secVal
+                      const secIsSel = selected === 'section'
+                      
+                      return (
+                        <span
+                          onClick={e => { e.stopPropagation(); onSelect('section') }}
+                          contentEditable
+                          suppressContentEditableWarning
+                          onMouseDown={e => e.stopPropagation()}
+                          onFocus={e => {
+                            if (secHasPlaceholder) e.currentTarget.textContent = ''
+                          }}
+                          onBlur={e => {
+                            const txt = e.currentTarget.textContent.trim()
+                            if (onValueChange) {
+                              onValueChange('section', txt === `[${secField.label}]` || !txt ? '' : txt)
+                            }
+                          }}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+                          style={{
+                            fontSize: ffSize, fontWeight: ffWeight, color: textColor,
+                            lineHeight: 1.3,
+                            textTransform: uppercase ? 'uppercase' : 'none',
+                            fontFamily: fontFam,
+                            outline: 'none', cursor: 'text',
+                            padding: '0 2px',
+                            border: secIsSel ? `1.5px dashed ${config.c1}` : '1.5px dashed transparent',
+                            background: secIsSel ? `${config.c1}09` : 'transparent',
+                            borderRadius: 3
+                          }}>{secDisplayVal}</span>
+                      )
+                    })()}
+                  </div>
+                </div>
+              )
+            }
+            )}
           </div>
         )
       })()}
@@ -1116,6 +1241,7 @@ export default function IDCardBuilder() {
   const [flowStartYDraft, setFlowStartYDraft] = useState(null)
   const [flowStartXDraft, setFlowStartXDraft] = useState(null)
   const [qrSizeDraft,    setQrSizeDraft]    = useState(null)
+  const [photoFileDraft, setPhotoFileDraft] = useState(null)
 
   useEffect(() => { setFsFontDraft(null) }, [selected])  // reset per-field draft when switching fields
   const bgInputRef    = useRef(null)
@@ -1127,6 +1253,13 @@ export default function IDCardBuilder() {
   const approved   = submissions.filter(s => s.status==='approved')
   const [customPreviewSub, setCustomPreviewSub] = useState(null)
   const previewSub = customPreviewSub || approved[previewIdx] || null
+
+  const handleValueChange = useCallback((key, newValue) => {
+    setCustomPreviewSub(prev => {
+      const base = prev || approved[previewIdx] || {}
+      return { ...base, [key]: newValue }
+    })
+  }, [approved, previewIdx])
 
   /* ── Load existing template when ?edit=ID is present ── */
   useEffect(() => {
@@ -1315,7 +1448,41 @@ export default function IDCardBuilder() {
     try {
       if (subId) {
         /* ── SAVE to individual submission ── */
-        const ok = await updateSubmission(subId, { customConfig: config })
+        let uploadedUrl = null
+        if (photoFileDraft) {
+          try {
+            const reader = new FileReader()
+            const dataUrl = await new Promise((resolve, reject) => {
+              reader.onload = ev => resolve(ev.target.result)
+              reader.onerror = reject
+              reader.readAsDataURL(photoFileDraft)
+            })
+            const { uploadPhoto } = await import('../lib/firebase')
+            uploadedUrl = await uploadPhoto(subId, dataUrl)
+          } catch (err) {
+            toast.error('Photo upload failed')
+            setSaving(false)
+            return
+          }
+        }
+
+        const fieldsToUpdate = { customConfig: config }
+        if (customPreviewSub) {
+          ALL_FIELDS.forEach(f => {
+            if (customPreviewSub[f.key] !== undefined) {
+              fieldsToUpdate[f.key] = customPreviewSub[f.key]
+            }
+          })
+          if (customPreviewSub.school_name !== undefined) fieldsToUpdate.school_name = customPreviewSub.school_name
+          if (customPreviewSub.role !== undefined) fieldsToUpdate.role = customPreviewSub.role
+          if (uploadedUrl) {
+            fieldsToUpdate.photo_url = uploadedUrl
+          } else if (customPreviewSub.photo_url !== undefined && !customPreviewSub.photo_url.startsWith('data:')) {
+            fieldsToUpdate.photo_url = customPreviewSub.photo_url
+          }
+        }
+
+        const ok = await updateSubmission(subId, fieldsToUpdate)
         if (ok) {
           toast.success(`Changes saved for ${previewSub?.name || 'card'}!`)
           navigate('/templates')
@@ -1525,6 +1692,32 @@ export default function IDCardBuilder() {
                     <button onClick={resetFS} style={{ fontSize:10, padding:'2px 8px', borderRadius:5, border:'1px solid var(--border)', background:'var(--red-s)', color:'var(--red)', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>↺ Reset</button>
                   </div>
 
+                  {/* Field Value */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink3)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>Field Value</div>
+                    {selected === 'address' ? (
+                      <textarea
+                        value={previewSub?.[selected] || ''}
+                        onChange={e => {
+                          const newSub = { ...(previewSub || {}), [selected]: e.target.value }
+                          setCustomPreviewSub(newSub)
+                        }}
+                        rows={2}
+                        style={{ width: '100%', padding: '6px 8px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 12, fontFamily: 'inherit', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={previewSub?.[selected] || ''}
+                        onChange={e => {
+                          const newSub = { ...(previewSub || {}), [selected]: e.target.value }
+                          setCustomPreviewSub(newSub)
+                        }}
+                        style={{ width: '100%', padding: '6px 8px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 12, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    )}
+                  </div>
+
                   {/* Highlight toggle */}
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10, padding:'8px 10px', background:'var(--paper)', borderRadius:8, border:'1px solid var(--border)' }}>
                     <div>
@@ -1681,6 +1874,106 @@ export default function IDCardBuilder() {
                 <span style={{ fontSize:18, color:'var(--ink3)', lineHeight:1 }}>+</span>
               </div>
             ))}
+
+            {/* ── Edit Card Values ── */}
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink3)', textTransform: 'uppercase', letterSpacing: .6, marginBottom: 8 }}>
+                {subId ? '📝 Edit Card Details' : '📝 Test Field Values'}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--ink3)', marginBottom: 10 }}>
+                {subId ? 'Changes will be saved to this card\'s record.' : 'Temporary values to test card layout.'}
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {/* School Name */}
+                <div>
+                  <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--ink3)', display: 'block', marginBottom: 3 }}>School / Org Name</label>
+                  <input type="text"
+                    value={previewSub?.school_name || ''}
+                    onChange={e => {
+                      const newSub = { ...(previewSub || {}), school_name: e.target.value }
+                      setCustomPreviewSub(newSub)
+                    }}
+                    style={{ width: '100%', padding: '6px 8px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 12, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                {/* Role */}
+                <div>
+                  <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--ink3)', display: 'block', marginBottom: 3 }}>Role</label>
+                  <input type="text"
+                    value={previewSub?.role || ''}
+                    onChange={e => {
+                      const newSub = { ...(previewSub || {}), role: e.target.value }
+                      setCustomPreviewSub(newSub)
+                    }}
+                    style={{ width: '100%', padding: '6px 8px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 12, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                {/* Photo URL / Upload */}
+                <div>
+                  <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--ink3)', display: 'block', marginBottom: 3 }}>Photo</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input type="text"
+                      value={previewSub?.photo_url || ''}
+                      onChange={e => {
+                        const newSub = { ...(previewSub || {}), photo_url: e.target.value }
+                        setCustomPreviewSub(newSub)
+                      }}
+                      placeholder="Photo URL or upload local file"
+                      style={{ flex: 1, padding: '6px 8px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 12, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 10px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--paper2)', color: 'var(--ink2)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                      Upload
+                      <input type="file" accept="image/*" onChange={e => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+                        if (file.size > 3*1024*1024) { toast.error('Max 3MB'); return }
+                        const reader = new FileReader()
+                        reader.onload = (ev) => {
+                          const newSub = { ...(previewSub || {}), photo_url: ev.target.result }
+                          setCustomPreviewSub(newSub)
+                          setPhotoFileDraft(file)
+                        }
+                        reader.readAsDataURL(file)
+                      }} style={{ display: 'none' }} />
+                    </label>
+                  </div>
+                </div>
+
+                {/* All visible/active fields */}
+                {config.visibleFields.map(key => {
+                  const f = ALL_FIELDS.find(ff => ff.key === key)
+                  if (!f) return null
+                  return (
+                    <div key={key}>
+                      <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--ink3)', display: 'block', marginBottom: 3 }}>{f.icon} {f.label}</label>
+                      {key === 'address' ? (
+                        <textarea
+                          value={previewSub?.[key] || ''}
+                          onChange={e => {
+                            const newSub = { ...(previewSub || {}), [key]: e.target.value }
+                            setCustomPreviewSub(newSub)
+                          }}
+                          rows={2}
+                          style={{ width: '100%', padding: '6px 8px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 12, fontFamily: 'inherit', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
+                        />
+                      ) : (
+                        <input type="text"
+                          value={previewSub?.[key] || ''}
+                          onChange={e => {
+                            const newSub = { ...(previewSub || {}), [key]: e.target.value }
+                            setCustomPreviewSub(newSub)
+                          }}
+                          style={{ width: '100%', padding: '6px 8px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 12, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                        />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         )}
 
@@ -2050,17 +2343,17 @@ export default function IDCardBuilder() {
                   {/* Label Column Width */}
                   <div>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
-                      <span style={{ fontSize:11, color:'var(--ink3)', fontWeight:600 }}>Label Column Width</span>
+                      <span style={{ fontSize:11, color:'var(--ink3)', fontWeight:600 }}>Colon Position</span>
                       <div style={{ display:'flex', alignItems:'center', gap:4 }}>
                         <input type="text" inputMode="numeric" pattern="[0-9]*"
-                          value={labelWidthDraft ?? String(config.labelWidth||72)}
+                          value={labelWidthDraft ?? String(config.labelWidth||90)}
                           onChange={e => {
                             const raw = e.target.value.replace(/[^0-9]/g, '')
                             setLabelWidthDraft(raw)
                             if (raw !== '') upd('labelWidth', Number(raw))
                           }}
                           onBlur={e => {
-                            const clamped = Math.min(250, Math.max(20, Number(e.target.value)||72))
+                            const clamped = Math.min(250, Math.max(20, Number(e.target.value)||90))
                             upd('labelWidth', clamped)
                             setLabelWidthDraft(null)
                           }}
@@ -2070,7 +2363,7 @@ export default function IDCardBuilder() {
                       </div>
                     </div>
                     <input type="range" min={20} max={250} step={1}
-                      value={config.labelWidth||72}
+                      value={config.labelWidth||90}
                       onChange={e => { upd('labelWidth', Number(e.target.value)); setLabelWidthDraft(null) }}
                       style={{ width:'100%', accentColor:'#2352ff' }}/>
                   </div>
@@ -2485,6 +2778,7 @@ export default function IDCardBuilder() {
               onSelect={handleSelect}
               multiSelected={multiSelected}
               onMultiSelect={handleMultiSelect}
+              onValueChange={handleValueChange}
             />
           </div>
 
