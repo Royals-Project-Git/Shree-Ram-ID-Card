@@ -4,8 +4,8 @@ import { useOrganizations } from '../hooks/useOrganizations'
 import { Input, Btn, Card, Badge } from '../components/shared/index'
 import toast from 'react-hot-toast'
 
-const ALL_FIELDS = ['Name','FathersName','ClassN','Section','DateofBirth','AdmissionNumber','RollNumber','EmployeeID','ContactNumber','EmergencyContact','BloodGroup','UploadYourPhoto','Address','ModeOfTransportation','Designation','AadhaarNumber','Department','EmailId','ValidFrom','ValidTill','BatchTiming']
-const ICONS = {Name:'👤',FathersName:'👨',ClassN:'🏫',Section:'📌',DateofBirth:'🎂',AdmissionNumber:'🔢',RollNumber:'🎯',EmployeeID:'🪪',ContactNumber:'📱',EmergencyContact:'🚨',BloodGroup:'🩸',UploadYourPhoto:'📷',Address:'📍',ModeOfTransportation:'🚌',Designation:'💼',AadhaarNumber:'🪪',Department:'🏢',EmailId:'✉️',ValidFrom:'📅',ValidTill:'📅',BatchTiming:'⏰'}
+const ALL_FIELDS = ['Name','FathersName','ClassN','Section','DateofBirth','AdmissionNumber','RollNumber','EmployeeID','ContactNumber','EmrgNo','BloodGroup','UploadYourPhoto','Address','ModeOfTransportation','Designation','AadhaarNumber','Department','EmailId','ValidFrom','ValidTill','BatchTiming']
+const ICONS = {Name:'👤',FathersName:'👨',ClassN:'🏫',Section:'📌',DateofBirth:'🎂',AdmissionNumber:'🔢',RollNumber:'🎯',EmployeeID:'🪪',ContactNumber:'📱',EmrgNo:'🚨',BloodGroup:'🩸',UploadYourPhoto:'📷',Address:'📍',ModeOfTransportation:'🚌',Designation:'💼',AadhaarNumber:'🪪',Department:'🏢',EmailId:'✉️',ValidFrom:'📅',ValidTill:'📅',BatchTiming:'⏰'}
 
 const FIELD_LABELS = {
   Name: 'Name',
@@ -17,7 +17,7 @@ const FIELD_LABELS = {
   RollNumber: 'Roll No.',
   EmployeeID: 'Employee ID',
   ContactNumber: 'Contact No.',
-  EmergencyContact: 'Emergency Contact',
+  EmrgNo: 'Emrg No.',
   BloodGroup: 'Blood Group',
   UploadYourPhoto: 'Profile Photo',
   Address: 'Address',
@@ -53,10 +53,10 @@ export default function AddTemplate() {
   const [loading,     setLoading]     = useState(false)
   const [result,      setResult]      = useState(null)
   const [copied,      setCopied]      = useState(false)
-  const [deleting,    setDeleting]    = useState(null)   // id of link being deleted
+  const [deleting,    setDeleting]    = useState(null)
   const [orgTypeErr,  setOrgTypeErr]  = useState('')
   const [orgNameErr,  setOrgNameErr]  = useState('')
-  const [previewOpen, setPreviewOpen] = useState(false)  // mobile preview toggle
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   const BASE_URL   = window.location.origin
   const selectedOrg = ORG_TYPES.find(o => o.value === orgType)
@@ -216,7 +216,6 @@ export default function AddTemplate() {
         {/* ── Left: Form ── */}
         <div className="at-left-form" style={{ padding: '36px 44px', borderRight: '1px solid var(--border)', overflowY: 'auto' }}>
           <div style={{ marginBottom: 28 }}>
-            {/* <div style={{ fontSize: 12, color: 'var(--blue)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, marginBottom: 4 }}>WideSoftech Pvt. Ltd.</div> */}
             <h1 style={{ fontFamily: 'Outfit,sans-serif', fontSize: 26, fontWeight: 900, color: 'var(--ink)', letterSpacing: -.5 }}>Generate Form Link</h1>
             <p style={{ fontSize: 14, color: 'var(--ink2)', marginTop: 4 }}>Configure fields and create a shareable form link for your organization.</p>
           </div>
