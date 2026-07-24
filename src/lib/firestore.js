@@ -51,15 +51,38 @@ export const submissionsApi = {
   },
 
   updateStatus: async (id, status) => {
-    await updateDoc(doc(db, 'submissions', id), { status })
+    const updates = { status }
+    if (status === 'approved') {
+      updates.approved_at = new Date()
+    } else if (status === 'deleted') {
+      updates.deleted_at = new Date()
+    } else if (status === 'rejected') {
+      updates.rejected_at = new Date()
+    }
+    await updateDoc(doc(db, 'submissions', id), updates)
   },
 
   bulkUpdateStatus: async (ids, status) => {
-    await Promise.all(ids.map(id => updateDoc(doc(db, 'submissions', id), { status })))
+    const updates = { status }
+    if (status === 'approved') {
+      updates.approved_at = new Date()
+    } else if (status === 'deleted') {
+      updates.deleted_at = new Date()
+    } else if (status === 'rejected') {
+      updates.rejected_at = new Date()
+    }
+    await Promise.all(ids.map(id => updateDoc(doc(db, 'submissions', id), updates)))
     return { updated: ids.length }
   },
 
   delete: async (id) => {
+    await updateDoc(doc(db, 'submissions', id), {
+      status: 'deleted',
+      deleted_at: new Date()
+    })
+  },
+
+  hardDelete: async (id) => {
     await deleteDoc(doc(db, 'submissions', id))
   },
 

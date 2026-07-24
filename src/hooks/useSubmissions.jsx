@@ -50,100 +50,214 @@ export function SubmissionsProvider({ children }) {
   const [approvedCount,  setApprovedCount]  = useState(0)
   const [pendingCount,   setPendingCount]   = useState(0)
   const [rejectedCount,  setRejectedCount]  = useState(0)
+  const [deletedCount,   setDeletedCount]   = useState(0)
   const [cursors,       setCursors]       = useState([null])
   const [activeFilters, setActiveFilters] = useState({
     filterRole: 'All',
     filterSch:  'All',
     filterStat: 'All',
     sortBy:     'date_desc',
+    dateFilterType: 'none',
+    filterDate: '',
+    filterStartDate: '',
+    filterEndDate: '',
   })
+
+  // Client-side date filter storage
+  const [fullFilteredSubmissions, setFullFilteredSubmissions] = useState(null)
 
   const snapshotUnsub = useRef(null)
   const isFirstLoad   = useRef(true)
 
+  /* Helper to extract firebase index link */
+  const handleFirebaseError = (err) => {
+    console.error('Firestore operation failed:', err)
+    const indexMatch = err.message?.match(/https:\/\/console\.firebase\.google\.com[^\s]*/)
+    if (indexMatch) {
+      toast.error(
+        <div>
+          Missing Firestore Index. Click <a href={indexMatch[0]} target="_blank" rel="noreferrer" style={{ textDecoration:'underline', fontWeight:'bold', color: 'white' }}>here</a> to create it.
+        </div>,
+        { duration: 15000 }
+      )
+    }
+  }
+
+  // Client-side helper to check if document matches date constraint
+  // Falls back to submitted_at if the status-specific date field doesn't exist (for older records)
+  const checkDateConstraint = useCallback((doc, dateField, dateFilterType, filterDate, filterStartDate, filterEndDate) => {
+    let dVal = doc[dateField]
+    // Fallback to submitted_at for older records that don't have approved_at/deleted_at/rejected_at
+    if (!dVal && dateField !== 'submitted_at') {
+      dVal = doc['submitted_at']
+    }
+    if (!dVal) return false
+    const date = dVal.toDate ? dVal.toDate() : new Date(dVal)
+    if (isNaN(date)) return false
+
+    if (dateFilterType === 'single' && filterDate) {
+      const targetDate = new Date(filterDate + 'T00:00:00')
+      return date.getFullYear() === targetDate.getFullYear() &&
+             date.getMonth() === targetDate.getMonth() &&
+             date.getDate() === targetDate.getDate()
+    } else if (dateFilterType === 'range') {
+      let matches = true
+      if (filterStartDate) {
+        const start = new Date(filterStartDate + 'T00:00:00')
+        matches = matches && date >= start
+      }
+      if (filterEndDate) {
+        const end = new Date(filterEndDate + 'T23:59:59.999')
+        matches = matches && date <= end
+      }
+      return matches
+    }
+    return true
+  }, [])
+
   /* ── Build Firestore constraints ─────────────────────────────── */
-  const buildConstraints = useCallback((filters, cursor = null) => {
+  const buildConstraints = useCallback((filters, cursor = null, ignorePaginationForDate = false) => {
     const { filterRole, filterSch, filterStat, sortBy } = filters
     const c = []
 
-    // NOTE: Firestore requires equality filters BEFORE range/orderBy.
-    // Status, role, and school_name are all equality filters — safe to combine.
-    if (filterStat !== 'All') c.push(where('status',      '==', filterStat.toLowerCase()))
+    if (filterStat !== 'All') {
+      c.push(where('status', '==', filterStat.toLowerCase()))
+    } else {
+      const hasDateFilter = (filters.dateFilterType === 'single' && filters.filterDate) || (filters.dateFilterType === 'range' && (filters.filterStartDate || filters.filterEndDate))
+      if (!hasDateFilter) {
+        c.push(where('status', 'in', ['pending', 'approved', 'rejected']))
+      }
+    }
     if (filterRole !== 'All') c.push(where('role',        '==', filterRole))
-    // school_name stores the org name for ALL org types (schools, colleges, hospitals…)
     if (filterSch  !== 'All') c.push(where('school_name', '==', filterSch))
 
     const sortField = sortBy === 'name_asc' ? 'name' : 'submitted_at'
     const sortDir   = (sortBy === 'date_asc' || sortBy === 'name_asc') ? 'asc' : 'desc'
     c.push(orderBy(sortField, sortDir))
-    if (cursor) c.push(startAfter(cursor))
-    c.push(limit(PAGE_SIZE))
+
+    const hasDateFilter = (filters.dateFilterType === 'single' && filters.filterDate) || (filters.dateFilterType === 'range' && (filters.filterStartDate || filters.filterEndDate))
+    if (!hasDateFilter || !ignorePaginationForDate) {
+      if (cursor) c.push(startAfter(cursor))
+      c.push(limit(PAGE_SIZE))
+    }
     return c
   }, [])
 
   /* Fetch total count + per-status counts for current filters */
   const refreshCount = useCallback(async (filters) => {
     try {
-      const { filterRole, filterSch, filterStat } = filters
+      const { filterRole, filterSch, filterStat, dateFilterType, filterDate, filterStartDate, filterEndDate } = filters
       const base = []
       if (filterRole !== 'All') base.push(where('role',        '==', filterRole))
       if (filterSch  !== 'All') base.push(where('school_name', '==', filterSch))
 
-      // Total count (respects status filter if set)
-      const totalC = filterStat !== 'All'
-        ? [...base, where('status', '==', filterStat.toLowerCase())]
-        : base
-      const totalSnap = await getCountFromServer(query(collection(db, 'submissions'), ...totalC))
-      setTotalCount(totalSnap.data().count)
+      const hasDateFilter = (dateFilterType === 'single' && filterDate) || (dateFilterType === 'range' && (filterStartDate || filterEndDate))
 
-      // Per-status counts always ignore the status filter so all are always accurate
-      const [appSnap, penSnap, rejSnap] = await Promise.all([
-        getCountFromServer(query(collection(db, 'submissions'), ...base, where('status', '==', 'approved'))),
-        getCountFromServer(query(collection(db, 'submissions'), ...base, where('status', '==', 'pending'))),
-        getCountFromServer(query(collection(db, 'submissions'), ...base, where('status', '==', 'rejected'))),
-      ])
-      setApprovedCount(appSnap.data().count)
-      setPendingCount(penSnap.data().count)
-      setRejectedCount(rejSnap.data().count)
-    } catch (err) { console.warn('Count failed:', err) }
-  }, [])
+      if (hasDateFilter) {
+        // Query ALL matching submissions (without status and date constraints) and count in memory
+        const q = query(collection(db, 'submissions'), ...base)
+        const snap = await getDocs(q)
+        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+
+        const appCount = docs.filter(s => s.status === 'approved' && checkDateConstraint(s, 'approved_at', dateFilterType, filterDate, filterStartDate, filterEndDate)).length
+        const penCount = docs.filter(s => s.status === 'pending' && checkDateConstraint(s, 'submitted_at', dateFilterType, filterDate, filterStartDate, filterEndDate)).length
+        const rejCount = docs.filter(s => s.status === 'rejected' && checkDateConstraint(s, 'submitted_at', dateFilterType, filterDate, filterStartDate, filterEndDate)).length
+        const delCount = docs.filter(s => s.status === 'deleted' && checkDateConstraint(s, 'deleted_at', dateFilterType, filterDate, filterStartDate, filterEndDate)).length
+
+        setApprovedCount(appCount)
+        setPendingCount(penCount)
+        setRejectedCount(rejCount)
+        setDeletedCount(delCount)
+
+        if (filterStat === 'approved') {
+          setTotalCount(appCount)
+        } else if (filterStat === 'pending') {
+          setTotalCount(penCount)
+        } else if (filterStat === 'rejected') {
+          setTotalCount(rejCount)
+        } else if (filterStat === 'deleted') {
+          setTotalCount(delCount)
+        } else {
+          setTotalCount(appCount + penCount + rejCount)
+        }
+      } else {
+        // No date filter active — use fast server-side aggregation counts (no index required!)
+        const [appSnap, penSnap, rejSnap, delSnap] = await Promise.all([
+          getCountFromServer(query(collection(db, 'submissions'), ...base, where('status', '==', 'approved'))),
+          getCountFromServer(query(collection(db, 'submissions'), ...base, where('status', '==', 'pending'))),
+          getCountFromServer(query(collection(db, 'submissions'), ...base, where('status', '==', 'rejected'))),
+          getCountFromServer(query(collection(db, 'submissions'), ...base, where('status', '==', 'deleted'))),
+        ])
+
+        const appVal = appSnap.data().count
+        const penVal = penSnap.data().count
+        const rejVal = rejSnap.data().count
+        const delVal = delSnap.data().count
+
+        setApprovedCount(appVal)
+        setPendingCount(penVal)
+        setRejectedCount(rejVal)
+        setDeletedCount(delVal)
+
+        if (filterStat === 'approved') {
+          setTotalCount(appVal)
+        } else if (filterStat === 'pending') {
+          setTotalCount(penVal)
+        } else if (filterStat === 'rejected') {
+          setTotalCount(rejVal)
+        } else if (filterStat === 'deleted') {
+          setTotalCount(delVal)
+        } else {
+          setTotalCount(appVal + penVal + rejVal)
+        }
+      }
+    } catch (err) {
+      console.warn('Count failed:', err)
+      handleFirebaseError(err)
+    }
+  }, [checkDateConstraint])
 
   /* Start real-time listener for page 1 */
   const startListener = useCallback((filters) => {
     if (snapshotUnsub.current) { snapshotUnsub.current(); snapshotUnsub.current = null }
-    const constraints = buildConstraints(filters, null)
+    const hasDateFilter = (filters.dateFilterType === 'single' && filters.filterDate) || (filters.dateFilterType === 'range' && (filters.filterStartDate || filters.filterEndDate))
+
+    const constraints = buildConstraints(filters, null, hasDateFilter)
     const q = query(collection(db, 'submissions'), ...constraints)
     snapshotUnsub.current = onSnapshot(q, (snap) => {
-      const docs = snap.docs.map(d => ({ id: d.id, _docRef: d, ...d.data() }))
+      let docs = snap.docs.map(d => ({ id: d.id, _docRef: d, ...d.data() }))
 
-      if (!isFirstLoad.current) {
-        snap.docChanges().forEach(change => {
-          if (change.type === 'added') {
-            const newDoc = { id: change.doc.id, ...change.doc.data() }
-            const orgName = newDoc.school_name || 'Unknown organization'
-            notificationsApi.create({
-              type:  'new_submission',
-              title: `New submission from ${newDoc.name || 'Someone'}`,
-              body:  `${orgName} · ${newDoc.role || 'Student'}${newDoc.class ? ' · Class ' + newDoc.class : ''}${newDoc.section ? ' ' + newDoc.section : ''}`.trim().replace(/·\s*$/, ''),
-              icon:  '📋', link: '/admin',
-              meta:  { submissionId: newDoc.id, org: orgName, name: newDoc.name },
-            }).catch(err => console.warn('Notification create failed:', err))
-            toast.success(`New submission from ${newDoc.name || 'someone'}!`)
-            setTotalCount(c => c + 1)
-          }
-        })
+      // Client-side filter for deleted status when on 'All' tab
+      if (filters.filterStat === 'All') {
+        docs = docs.filter(s => s.status !== 'deleted')
       }
-      isFirstLoad.current = false
-      setPage(docs)
-      setCurrentPage(1)
-      // cursors[0] = null (start of collection), cursors[1] = last doc of page 1
-      setCursors([null, snap.docs[snap.docs.length - 1] || null])
+
+      if (hasDateFilter) {
+        let dateField = 'submitted_at'
+        if (filters.filterStat === 'approved') dateField = 'approved_at'
+        else if (filters.filterStat === 'deleted') dateField = 'deleted_at'
+        else if (filters.filterStat === 'rejected') dateField = 'rejected_at'
+
+        docs = docs.filter(doc => checkDateConstraint(doc, dateField, filters.dateFilterType, filters.filterDate, filters.filterStartDate, filters.filterEndDate))
+
+        setFullFilteredSubmissions(docs)
+        setTotalCount(docs.length)
+        setPage(docs.slice(0, PAGE_SIZE))
+        setCurrentPage(1)
+        setCursors([null])
+      } else {
+        setFullFilteredSubmissions(null)
+        setPage(docs)
+        setCurrentPage(1)
+        setCursors([null, snap.docs[snap.docs.length - 1] || null])
+      }
       setLoading(false)
     }, (err) => {
       console.error('Submissions listener error:', err)
       setLoading(false)
+      handleFirebaseError(err)
     })
-  }, [buildConstraints])
+  }, [buildConstraints, checkDateConstraint])
 
   /* Auth init */
   useEffect(() => {
@@ -155,7 +269,7 @@ export function SubmissionsProvider({ children }) {
         refreshCount(activeFilters)
       } else {
         if (snapshotUnsub.current) { snapshotUnsub.current(); snapshotUnsub.current = null }
-        setPage([]); setTotalCount(0); setApprovedCount(0); setPendingCount(0); setRejectedCount(0); setLoading(false)
+        setPage([]); setTotalCount(0); setApprovedCount(0); setPendingCount(0); setRejectedCount(0); setDeletedCount(0); setLoading(false)
       }
     })
     return () => {
@@ -179,6 +293,16 @@ export function SubmissionsProvider({ children }) {
   const goToPage = useCallback(async (pageNum) => {
     if (pageNum === currentPage) return
 
+    if (fullFilteredSubmissions) {
+      setPageLoading(true)
+      const start = (pageNum - 1) * PAGE_SIZE
+      const end = pageNum * PAGE_SIZE
+      setPage(fullFilteredSubmissions.slice(start, end))
+      setCurrentPage(pageNum)
+      setPageLoading(false)
+      return
+    }
+
     if (pageNum === 1) {
       setLoading(true)
       isFirstLoad.current = false
@@ -196,7 +320,7 @@ export function SubmissionsProvider({ children }) {
         // If there's no cursor for the previous page, we're past the end
         if (prevCursor === undefined) break
         const snap = await getDocs(
-          query(collection(db, 'submissions'), ...buildConstraints(activeFilters, prevCursor))
+          query(collection(db, 'submissions'), ...buildConstraints(activeFilters, prevCursor, false))
         )
         if (snap.empty) break
         cursorSnaps.push(snap.docs[snap.docs.length - 1])
@@ -204,9 +328,15 @@ export function SubmissionsProvider({ children }) {
 
       const targetCursor = cursorSnaps[pageNum - 1]
       const snap = await getDocs(
-        query(collection(db, 'submissions'), ...buildConstraints(activeFilters, targetCursor))
+        query(collection(db, 'submissions'), ...buildConstraints(activeFilters, targetCursor, false))
       )
-      const docs = snap.docs.map(d => ({ id: d.id, _docRef: d, ...d.data() }))
+      let docs = snap.docs.map(d => ({ id: d.id, _docRef: d, ...d.data() }))
+
+      // Client-side filter for deleted status when on 'All' tab and date filter is active
+      const hasDateFilter = (activeFilters.dateFilterType === 'single' && activeFilters.filterDate) || (activeFilters.dateFilterType === 'range' && (activeFilters.filterStartDate || activeFilters.filterEndDate))
+      if (activeFilters.filterStat === 'All' && hasDateFilter) {
+        docs = docs.filter(s => s.status !== 'deleted')
+      }
 
       // Detach live listener when browsing beyond page 1
       if (snapshotUnsub.current) { snapshotUnsub.current(); snapshotUnsub.current = null }
@@ -218,22 +348,20 @@ export function SubmissionsProvider({ children }) {
     } catch (err) {
       console.error('Page fetch error:', err)
       toast.error('Failed to load page')
+      handleFirebaseError(err)
     } finally {
       setPageLoading(false)
     }
-  }, [currentPage, cursors, activeFilters, buildConstraints, startListener])
+  }, [currentPage, cursors, activeFilters, buildConstraints, startListener, fullFilteredSubmissions])
 
   /* ── CRUD ───────────────────────────────────────────────────── */
   const createSubmission = async (formData, photoDataUrl) => {
     const payload = mapToFirestore(formData)
 
-    // If there's a photo, upload to Cloudinary FIRST (before creating the Firestore doc)
-    // so we can include photo_url in the initial create — avoiding a separate updateDoc
-    // which would fail because the public form user is not authenticated.
+    // If there's a photo, upload to Cloudinary FIRST
     if (photoDataUrl) {
       try {
         const { uploadPhoto } = await import('../lib/firebase')
-        // Upload with a temp key; we'll use the real doc ID after
         const tempId = `temp_${Date.now()}`
         const url = await uploadPhoto(tempId, photoDataUrl)
         payload.photo_url = url
@@ -250,10 +378,16 @@ export function SubmissionsProvider({ children }) {
 
   const updateStatus = async (id, status, submissionName = '') => {
     try {
+      const updates = { status }
+      const now = new Date()
+      if (status === 'approved') updates.approved_at = now
+      else if (status === 'deleted') updates.deleted_at = now
+      else if (status === 'rejected') updates.rejected_at = now
+
       await submissionsApi.updateStatus(id, status)
       toast.success(`Submission ${status}`)
-      setPage(prev => prev.map(s => s.id === id ? { ...s, status } : s))
-      const icons = { approved: '✅', rejected: '❌', pending: '⏳' }
+      setPage(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s))
+      const icons = { approved: '✅', rejected: '❌', pending: '⏳', deleted: '🗑' }
       notificationsApi.create({
         type: 'status_change',
         title: `Submission ${status}`,
@@ -279,9 +413,15 @@ export function SubmissionsProvider({ children }) {
 
   const bulkUpdateStatus = async (ids, status) => {
     try {
+      const updates = { status }
+      const now = new Date()
+      if (status === 'approved') updates.approved_at = now
+      else if (status === 'deleted') updates.deleted_at = now
+      else if (status === 'rejected') updates.rejected_at = now
+
       const res = await submissionsApi.bulkUpdateStatus(ids, status)
       toast.success(`${res.updated} submissions ${status}`)
-      setPage(prev => prev.map(s => ids.includes(s.id) ? { ...s, status } : s))
+      setPage(prev => prev.map(s => ids.includes(s.id) ? { ...s, ...updates } : s))
       refreshCount(activeFilters)
       return true
     } catch (err) { toast.error(err.message || 'Bulk update failed'); return false }
@@ -290,9 +430,18 @@ export function SubmissionsProvider({ children }) {
   const deleteSubmission = async (id) => {
     try {
       await submissionsApi.delete(id)
-      toast.success('Submission deleted')
+      toast.success('Submission moved to Deleted tab')
       setPage(prev => prev.filter(s => s.id !== id))
-      setTotalCount(c => Math.max(0, c - 1))
+      refreshCount(activeFilters)
+      return true
+    } catch (err) { toast.error(err.message || 'Delete failed'); return false }
+  }
+
+  const hardDeleteSubmission = async (id) => {
+    try {
+      await submissionsApi.hardDelete(id)
+      toast.success('Submission permanently deleted')
+      setPage(prev => prev.filter(s => s.id !== id))
       refreshCount(activeFilters)
       return true
     } catch (err) { toast.error(err.message || 'Delete failed'); return false }
@@ -301,9 +450,18 @@ export function SubmissionsProvider({ children }) {
   const bulkDeleteSubmissions = async (ids) => {
     try {
       await Promise.all(ids.map(id => submissionsApi.delete(id)))
-      toast.success(`${ids.length} submission${ids.length > 1 ? 's' : ''} deleted`)
+      toast.success(`${ids.length} submissions moved to Deleted tab`)
       setPage(prev => prev.filter(s => !ids.includes(s.id)))
-      setTotalCount(c => Math.max(0, c - ids.length))
+      refreshCount(activeFilters)
+      return true
+    } catch (err) { toast.error(err.message || 'Bulk delete failed'); return false }
+  }
+
+  const bulkHardDeleteSubmissions = async (ids) => {
+    try {
+      await Promise.all(ids.map(id => submissionsApi.hardDelete(id)))
+      toast.success(`${ids.length} submissions permanently deleted`)
+      setPage(prev => prev.filter(s => !ids.includes(s.id)))
       refreshCount(activeFilters)
       return true
     } catch (err) { toast.error(err.message || 'Bulk delete failed'); return false }
@@ -329,22 +487,6 @@ export function SubmissionsProvider({ children }) {
     }, 400)
   }, [])
 
-  // ── Final, non-debounced duplicate check — used right before actually
-  // creating a submission. The live `checkDuplicate` above is debounced
-  // (400ms) and only updates UI warning state, so a fast typer/clicker could
-  // hit "Submit" before that warning ever lands, letting a real duplicate
-  // through. This one runs synchronously (awaited) at the moment of submit,
-  // queries Firestore fresh, and is the actual gate that blocks duplicates.
-  //
-  // Scoping by role:
-  //   - Student: narrowed to the same school + class + section (a contact
-  //     number can legitimately repeat across different classes/sections —
-  //     e.g. siblings/guardians — so we only block exact same-class repeats).
-  //   - Staff / Employee: no class/section exists for these roles, so the
-  //     check is school-wide instead. It also does NOT filter by role —
-  //     a contact number already used by a Student, Staff, or Employee at
-  //     that school will block a new Staff/Employee submission too, so the
-  //     same person can't end up registered twice under different roles.
   const checkDuplicateNow = useCallback(async (schoolName, contactNumber, cls, sec, role) => {
     if (!schoolName || !contactNumber) return null
     try {
@@ -353,14 +495,10 @@ export function SubmissionsProvider({ children }) {
         where('contact_number', '==', contactNumber),
       ]
       const isStaffOrEmployee = role === 'Staff' || role === 'Employee'
-      // Only narrow by class/section for Student submissions.
       if (!isStaffOrEmployee) {
         if (cls) constraints.push(where('class',   '==', cls))
         if (sec) constraints.push(where('section', '==', sec))
       }
-      // Staff/Employee checks intentionally omit a role filter, so they
-      // catch duplicates against ANY existing submission at the school —
-      // Student, Staff, or Employee alike.
       constraints.push(limit(1))
       const snap = await getDocs(query(collection(db, 'submissions'), ...constraints))
       return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() }
@@ -371,18 +509,53 @@ export function SubmissionsProvider({ children }) {
   }, [])
 
   const fetchAllSubmissions = useCallback(async (filters) => {
-    const { filterRole, filterSch, filterStat, sortBy } = filters
+    const { filterRole, filterSch, filterStat, sortBy, dateFilterType, filterDate, filterStartDate, filterEndDate } = filters
     const c = []
-    if (filterStat !== 'All') c.push(where('status',      '==', filterStat.toLowerCase()))
+    
+    if (filterStat !== 'All') {
+      c.push(where('status', '==', filterStat.toLowerCase()))
+    } else {
+      const hasDateFilter = (dateFilterType === 'single' && filterDate) || (dateFilterType === 'range' && (filterStartDate || filterEndDate))
+      if (!hasDateFilter) {
+        c.push(where('status', 'in', ['pending', 'approved', 'rejected']))
+      }
+    }
     if (filterRole !== 'All') c.push(where('role',        '==', filterRole))
     if (filterSch  !== 'All') c.push(where('school_name', '==', filterSch))
 
-    const sortField = sortBy === 'name_asc' ? 'name' : 'submitted_at'
+    let dateField = 'submitted_at'
+    if (filterStat === 'approved') dateField = 'approved_at'
+    else if (filterStat === 'deleted') dateField = 'deleted_at'
+    else if (filterStat === 'rejected') dateField = 'rejected_at'
+
+    const hasDateFilter = (dateFilterType === 'single' && filterDate) || (dateFilterType === 'range' && (filterStartDate || filterEndDate))
+    if (dateFilterType === 'single' && filterDate) {
+      const start = new Date(filterDate + 'T00:00:00')
+      const end = new Date(filterDate + 'T23:59:59.999')
+      c.push(where(dateField, '>=', start))
+      c.push(where(dateField, '<=', end))
+    } else if (dateFilterType === 'range') {
+      if (filterStartDate) {
+        const start = new Date(filterStartDate + 'T00:00:00')
+        c.push(where(dateField, '>=', start))
+      }
+      if (filterEndDate) {
+        const end = new Date(filterEndDate + 'T23:59:59.999')
+        c.push(where(dateField, '<=', end))
+      }
+    }
+
+    const sortField = hasDateFilter ? dateField : (sortBy === 'name_asc' ? 'name' : 'submitted_at')
     const sortDir   = (sortBy === 'date_asc' || sortBy === 'name_asc') ? 'asc' : 'desc'
     c.push(orderBy(sortField, sortDir))
 
     const snap = await getDocs(query(collection(db, 'submissions'), ...c))
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+
+    if (filterStat === 'All' && hasDateFilter) {
+      docs = docs.filter(s => s.status !== 'deleted')
+    }
+    return docs
   }, [])
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
@@ -398,6 +571,7 @@ export function SubmissionsProvider({ children }) {
       approvedCount,
       pendingCount,
       rejectedCount,
+      deletedCount,
       totalPages,
       activeFilters,
       applyFilters,
@@ -407,11 +581,12 @@ export function SubmissionsProvider({ children }) {
       updateSubmission,
       bulkUpdateStatus,
       deleteSubmission,
+      hardDeleteSubmission,
       bulkDeleteSubmissions,
+      bulkHardDeleteSubmissions,
       checkDuplicate,
       checkDuplicateNow,
       fetchAllSubmissions,
-      fetchSubmissions: () => {},
     }}>
       {children}
     </SubmissionsContext.Provider>

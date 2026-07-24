@@ -124,8 +124,9 @@ export default function Admin() {
   const {
     submissions, loading, pageLoading,
     currentPage, totalCount, totalPages,
+    approvedCount, pendingCount, rejectedCount, deletedCount,
     applyFilters, goToPage,
-    updateStatus, updateSubmission, bulkUpdateStatus, deleteSubmission, bulkDeleteSubmissions,
+    updateStatus, updateSubmission, bulkUpdateStatus, deleteSubmission, hardDeleteSubmission, bulkDeleteSubmissions, bulkHardDeleteSubmissions,
     fetchAllSubmissions,
   } = useSubmissions()
 
@@ -151,6 +152,12 @@ export default function Admin() {
   const [deleteId,      setDeleteId]      = useState(null)
   const [bulkDeleteIds, setBulkDeleteIds] = useState([])
 
+  // Date Filter UI State
+  const [dateFilterType, setDateFilterType] = useState('none')
+  const [filterDate,      setFilterDate]      = useState('')
+  const [filterStartDate, setFilterStartDate] = useState('')
+  const [filterEndDate,   setFilterEndDate]   = useState('')
+
   // All unique org types present in the organizations collection
   const orgTypes = useMemo(() => {
     const types = [...new Set(organizations.map(o => o.type).filter(Boolean))].sort()
@@ -173,14 +180,23 @@ export default function Admin() {
     }
   }, [filterType, filterOrg, organizations])
 
-  // Push name/role/status/sort to Firestore whenever they change
+  // Push name/role/status/sort/date to Firestore whenever they change
   useEffect(() => {
     const t = setTimeout(() => {
-      applyFilters({ filterRole, filterSch: filterOrg, filterStat, sortBy })
+      applyFilters({
+        filterRole,
+        filterSch: filterOrg,
+        filterStat,
+        sortBy,
+        dateFilterType,
+        filterDate,
+        filterStartDate,
+        filterEndDate
+      })
     }, 50)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterRole, filterOrg, filterStat, sortBy])
+  }, [filterRole, filterOrg, filterStat, sortBy, dateFilterType, filterDate, filterStartDate, filterEndDate])
 
   // Client-side: org-type filter + text search on top of the Firestore page
   const filtered = useMemo(() => {
@@ -213,6 +229,7 @@ export default function Admin() {
   const clearFilters = () => {
     setFilterType('All'); setFilterOrg('All')
     setFilterRole('All'); setFilterStat('All'); setSearch('')
+    setDateFilterType('none'); setFilterDate(''); setFilterStartDate(''); setFilterEndDate('')
   }
 
   // All possible editable fields with their labels (excluding system fields)
@@ -321,7 +338,7 @@ export default function Admin() {
   }
 
   const isLoading = loading || pageLoading
-  const hasActiveFilters = filterType !== 'All' || filterOrg !== 'All' || filterRole !== 'All' || filterStat !== 'All'
+  const hasActiveFilters = filterType !== 'All' || filterOrg !== 'All' || filterRole !== 'All' || filterStat !== 'All' || dateFilterType !== 'none'
 
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'80vh' }}>
@@ -335,14 +352,14 @@ export default function Admin() {
         .admin-wrap { padding: 40px; padding-top: 104px; }
         .admin-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; }
         .admin-header-btns { display: flex; gap: 10px; flex-wrap: wrap; }
-        .admin-col-contact, .admin-col-org, .admin-col-date { display: table-cell; }
+        .admin-col-contact, .admin-col-org, .admin-col-date, .admin-col-action-date { display: table-cell; }
         .admin-filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
         .admin-filter-select { padding: 9px 12px; border-radius: var(--r); border: 1.5px solid var(--border); font-size: 13px; color: var(--ink2); background: var(--paper); outline: none; cursor: pointer; transition: border-color .15s; }
         .admin-filter-select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(35,82,255,.1); }
 
         @media (max-width: 900px) {
           .admin-wrap { padding: 20px !important; padding-top: 80px !important; }
-          .admin-col-date { display: none !important; }
+          .admin-col-date, .admin-col-action-date { display: none !important; }
         }
         @media (max-width: 700px) {
           .admin-header { flex-direction: column !important; gap: 14px !important; }
@@ -374,12 +391,20 @@ export default function Admin() {
           </div>
         </div>
 
-        {/* Stat pills */}
+        {/* Stat pills with dynamic counts */}
         <div style={{ display:'flex', gap:8, marginBottom:20, flexWrap:'wrap' }}>
-          {[['All','All'],['Pending','pending'],['Approved','approved'],['Rejected','rejected']].map(([label, val]) => (
-            <div key={label} onClick={() => setFilterStat(val)}
+          {[
+            ['All',        'All',      approvedCount + pendingCount + rejectedCount],
+            ['Pending',    'pending',  pendingCount],
+            ['Approved',   'approved', approvedCount],
+            ['Rejected',   'rejected', rejectedCount],
+            ['Deleted',    'deleted',  deletedCount]
+          ].map(([label, val, count]) => (
+            <div key={label} onClick={() => { setFilterStat(val); setSelected([]); }}
               style={{ padding:'7px 14px', borderRadius:'var(--r)', border:`2px solid ${filterStat === val ? 'var(--blue)' : 'var(--border)'}`, background: filterStat === val ? 'var(--blue-s)' : 'var(--paper)', cursor:'pointer', display:'flex', alignItems:'center', gap:8, transition:'all .15s' }}>
-              <span style={{ fontSize:13, fontWeight:700, color: filterStat === val ? 'var(--blue)' : 'var(--ink2)' }}>{label}</span>
+              <span style={{ fontSize:13, fontWeight:700, color: filterStat === val ? 'var(--blue)' : 'var(--ink2)' }}>
+                {label} <span style={{ opacity: 0.6, fontSize: 11, fontWeight: 500, marginLeft: 4 }}>({count})</span>
+              </span>
             </div>
           ))}
         </div>
@@ -436,6 +461,43 @@ export default function Admin() {
                 <option value="name_asc">Name A–Z</option>
               </select>
 
+              {/* Date Filter Selector */}
+              <select className="admin-filter-select" value={dateFilterType} onChange={e => { setDateFilterType(e.target.value); setFilterDate(''); setFilterStartDate(''); setFilterEndDate(''); }}>
+                <option value="none">📅 No Date Filter</option>
+                <option value="single">📅 Single Date</option>
+                <option value="range">📅 Date Range</option>
+              </select>
+
+              {dateFilterType === 'single' && (
+                <input
+                  type="date"
+                  className="admin-filter-select"
+                  value={filterDate}
+                  onChange={e => setFilterDate(e.target.value)}
+                  style={{ color: 'var(--ink)' }}
+                />
+              )}
+
+              {dateFilterType === 'range' && (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input
+                    type="date"
+                    className="admin-filter-select"
+                    value={filterStartDate}
+                    onChange={e => setFilterStartDate(e.target.value)}
+                    style={{ color: 'var(--ink)' }}
+                  />
+                  <span style={{ fontSize: 13, color: 'var(--ink3)' }}>to</span>
+                  <input
+                    type="date"
+                    className="admin-filter-select"
+                    value={filterEndDate}
+                    onChange={e => setFilterEndDate(e.target.value)}
+                    style={{ color: 'var(--ink)' }}
+                  />
+                </div>
+              )}
+
               <Btn size="sm" variant="ghost" onClick={() => navigate('/templates')}>Templates →</Btn>
             </div>
 
@@ -467,6 +529,18 @@ export default function Admin() {
                     ● {filterStat} ✕
                   </span>
                 )}
+                {dateFilterType === 'single' && filterDate && (
+                  <span onClick={() => { setFilterDate('') }}
+                    style={{ fontSize:12, fontWeight:700, color:'var(--purple)', background:'var(--purple-s)', padding:'3px 10px', borderRadius:20, cursor:'pointer' }}>
+                    📅 {filterDate} ✕
+                  </span>
+                )}
+                {dateFilterType === 'range' && (filterStartDate || filterEndDate) && (
+                  <span onClick={() => { setFilterStartDate(''); setFilterEndDate('') }}
+                    style={{ fontSize:12, fontWeight:700, color:'var(--purple)', background:'var(--purple-s)', padding:'3px 10px', borderRadius:20, cursor:'pointer' }}>
+                    📅 {filterStartDate || '...'} to {filterEndDate || '...'} ✕
+                  </span>
+                )}
                 <button onClick={clearFilters}
                   style={{ fontSize:11, color:'var(--ink3)', background:'none', border:'none', cursor:'pointer', fontWeight:700, padding:'3px 8px', textDecoration:'underline' }}>
                   Clear all
@@ -478,9 +552,19 @@ export default function Admin() {
             {selected.length > 0 && (
               <div style={{ display:'flex', gap:8, padding:'8px 12px', background:'var(--blue-s)', borderRadius:'var(--r)', border:'1px solid var(--blue-m)', marginTop:10, flexWrap:'wrap', alignItems:'center' }}>
                 <span style={{ fontSize:13, fontWeight:600, color:'var(--blue)' }}>{selected.length} selected</span>
-                <button onClick={() => bulkUpdateStatus(selected,'approved').then(() => setSelected([]))} style={{ fontSize:12,fontWeight:700,color:'#00875f',background:'var(--teal-s)',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer' }}>✓ Approve All</button>
-                <button onClick={() => bulkUpdateStatus(selected,'rejected').then(() => setSelected([]))} style={{ fontSize:12,fontWeight:700,color:'#b91c1c',background:'var(--red-s)',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer' }}>✕ Reject All</button>
-                <button onClick={() => setBulkDeleteIds([...selected])} style={{ fontSize:12,fontWeight:700,color:'#b91c1c',background:'var(--red-s)',border:'1px solid #fca5a5',padding:'4px 10px',borderRadius:6,cursor:'pointer' }}>🗑 Delete All</button>
+                {filterStat === 'deleted' ? (
+                  <>
+                    <button onClick={() => bulkUpdateStatus(selected,'pending').then(() => setSelected([]))} style={{ fontSize:12,fontWeight:700,color:'var(--ink2)',background:'var(--paper3)',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer' }}>🔄 Restore All</button>
+                    <button onClick={() => bulkUpdateStatus(selected,'approved').then(() => setSelected([]))} style={{ fontSize:12,fontWeight:700,color:'#00875f',background:'var(--teal-s)',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer' }}>✓ Approve All</button>
+                    <button onClick={() => setBulkDeleteIds([...selected])} style={{ fontSize:12,fontWeight:700,color:'#b91c1c',background:'var(--red-s)',border:'1px solid #fca5a5',padding:'4px 10px',borderRadius:6,cursor:'pointer' }}>🗑 Delete Permanently</button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => bulkUpdateStatus(selected,'approved').then(() => setSelected([]))} style={{ fontSize:12,fontWeight:700,color:'#00875f',background:'var(--teal-s)',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer' }}>✓ Approve All</button>
+                    <button onClick={() => bulkUpdateStatus(selected,'rejected').then(() => setSelected([]))} style={{ fontSize:12,fontWeight:700,color:'#b91c1c',background:'var(--red-s)',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer' }}>✕ Reject All</button>
+                    <button onClick={() => setBulkDeleteIds([...selected])} style={{ fontSize:12,fontWeight:700,color:'#b91c1c',background:'var(--red-s)',border:'1px solid #fca5a5',padding:'4px 10px',borderRadius:6,cursor:'pointer' }}>🗑 Delete All</button>
+                  </>
+                )}
                 <button onClick={() => setSelected([])} style={{ fontSize:12,fontWeight:700,color:'var(--ink3)',background:'var(--paper3)',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer' }}>Clear</button>
               </div>
             )}
@@ -504,9 +588,9 @@ export default function Admin() {
                     <th style={{ padding:'11px 12px', textAlign:'left', fontSize:11, fontWeight:700, color:'var(--ink3)', textTransform:'uppercase', letterSpacing:.5, borderBottom:'2px solid var(--border)' }}>
                       <input type="checkbox" checked={selected.length===filtered.length && filtered.length>0} onChange={toggleAll} style={{ accentColor:'var(--blue)' }}/>
                     </th>
-                    {['Name','Contact','Organization','Role','Status','Submitted','Actions'].map(h => (
+                    {['Name','Contact','Organization','Role','Status','Approval/Delete Date','Submitted','Actions'].map(h => (
                       <th key={h}
-                        className={h==='Contact'?'admin-col-contact':h==='Submitted'?'admin-col-date':h==='Organization'?'admin-col-org':''}
+                        className={h==='Contact'?'admin-col-contact':h==='Submitted'?'admin-col-date':h==='Organization'?'admin-col-org':h==='Approval/Delete Date'?'admin-col-action-date':''}
                         style={{ padding:'11px 12px', textAlign:'left', fontSize:11, fontWeight:700, color:'var(--ink3)', textTransform:'uppercase', letterSpacing:.5, borderBottom:'2px solid var(--border)', whiteSpace:'nowrap' }}>
                         {h}
                       </th>
@@ -544,15 +628,19 @@ export default function Admin() {
                           )}
                         </td>
                         <td style={{ padding:'11px 12px' }}><Badge type={s.role==='Student'?'blue':s.role==='Staff'?'teal':'amber'}>{s.role}</Badge></td>
-                        <td style={{ padding:'11px 12px' }}><Badge type={s.status==='approved'?'teal':s.status==='pending'?'amber':'red'} dot>{s.status}</Badge></td>
+                        <td style={{ padding:'11px 12px' }}><Badge type={s.status==='approved'?'teal':s.status==='pending'?'amber':s.status==='deleted'?'gray':'red'} dot>{s.status}</Badge></td>
+                        <td className="admin-col-action-date" style={{ padding:'11px 12px', fontSize:12, color:'var(--ink3)', fontFamily:'JetBrains Mono,monospace', whiteSpace:'nowrap' }}>
+                          {s.status === 'approved' ? fmtDate(s.approved_at) : s.status === 'deleted' ? fmtDate(s.deleted_at) : '—'}
+                        </td>
                         <td className="admin-col-date" style={{ padding:'11px 12px', fontSize:12, color:'var(--ink3)', fontFamily:'JetBrains Mono,monospace', whiteSpace:'nowrap' }}>{fmtDate(s.submitted_at)}</td>
                         <td style={{ padding:'11px 12px' }}>
                           <div style={{ display:'flex', gap:5 }}>
                             <button onClick={e=>{e.stopPropagation();setViewSub(s)}} title="View" style={{ width:30,height:30,borderRadius:7,border:'none',background:'var(--blue-s)',color:'var(--blue)',cursor:'pointer',fontSize:14 }}>👁</button>
-                            <button onClick={e=>{e.stopPropagation();openEdit(s)}} title="Edit" style={{ width:30,height:30,borderRadius:7,border:'none',background:'var(--paper3)',color:'var(--ink2)',cursor:'pointer',fontSize:14 }}>✏️</button>
+                            {s.status !== 'deleted' && <button onClick={e=>{e.stopPropagation();openEdit(s)}} title="Edit" style={{ width:30,height:30,borderRadius:7,border:'none',background:'var(--paper3)',color:'var(--ink2)',cursor:'pointer',fontSize:14 }}>✏️</button>}
                             {s.status!=='approved' && <button onClick={e=>{e.stopPropagation();updateStatus(s.id,'approved',s.name)}} title="Approve" style={{ width:30,height:30,borderRadius:7,border:'none',background:'var(--teal-s)',color:'#00875f',cursor:'pointer',fontSize:14 }}>✓</button>}
-                            {s.status!=='rejected' && <button onClick={e=>{e.stopPropagation();updateStatus(s.id,'rejected',s.name)}} title="Reject" style={{ width:30,height:30,borderRadius:7,border:'none',background:'var(--red-s)',color:'#b91c1c',cursor:'pointer',fontSize:14 }}>✕</button>}
-                            <button onClick={e=>{e.stopPropagation();setDeleteId(s.id)}} title="Delete" style={{ width:30,height:30,borderRadius:7,border:'none',background:'var(--paper3)',color:'var(--ink3)',cursor:'pointer',fontSize:14 }}>🗑</button>
+                            {s.status!=='rejected' && s.status!=='deleted' && <button onClick={e=>{e.stopPropagation();updateStatus(s.id,'rejected',s.name)}} title="Reject" style={{ width:30,height:30,borderRadius:7,border:'none',background:'var(--red-s)',color:'#b91c1c',cursor:'pointer',fontSize:14 }}>✕</button>}
+                            {s.status==='deleted' && <button onClick={e=>{e.stopPropagation();updateStatus(s.id,'pending',s.name)}} title="Restore to Pending" style={{ width:30,height:30,borderRadius:7,border:'none',background:'var(--paper3)',color:'var(--ink2)',cursor:'pointer',fontSize:14 }}>🔄</button>}
+                            <button onClick={e=>{e.stopPropagation();setDeleteId(s.id)}} title={s.status==='deleted'?'Delete Permanently':'Delete'} style={{ width:30,height:30,borderRadius:7,border:'none',background:'var(--paper3)',color:'var(--ink3)',cursor:'pointer',fontSize:14 }}>🗑</button>
                           </div>
                         </td>
                       </tr>
@@ -593,7 +681,7 @@ export default function Admin() {
                     </div>
                     <div style={{ display:'flex',gap:8,marginTop:8,flexWrap:'wrap' }}>
                       <Badge type={viewSub.role==='Student'?'blue':viewSub.role==='Staff'?'teal':'amber'}>{viewSub.role}</Badge>
-                      <Badge type={viewSub.status==='approved'?'teal':viewSub.status==='pending'?'amber':'red'} dot>{viewSub.status}</Badge>
+                      <Badge type={viewSub.status==='approved'?'teal':viewSub.status==='pending'?'amber':viewSub.status==='deleted'?'gray':'red'} dot>{viewSub.status}</Badge>
                     </div>
                   </div>
                 </div>
@@ -627,8 +715,9 @@ export default function Admin() {
                 </div>
                 <div style={{ display:'flex',gap:10,flexWrap:'wrap' }}>
                   {viewSub.status!=='approved' && <Btn variant="teal" full onClick={()=>{updateStatus(viewSub.id,'approved',viewSub.name);setViewSub(null)}}>✓ Approve</Btn>}
-                  {viewSub.status!=='rejected' && <Btn variant="danger" full onClick={()=>{updateStatus(viewSub.id,'rejected',viewSub.name);setViewSub(null)}}>✕ Reject</Btn>}
-                  <Btn variant="ghost" onClick={() => { openEdit(viewSub); setViewSub(null) }}>✏️ Edit</Btn>
+                  {viewSub.status!=='rejected' && viewSub.status!=='deleted' && <Btn variant="danger" full onClick={()=>{updateStatus(viewSub.id,'rejected',viewSub.name);setViewSub(null)}}>✕ Reject</Btn>}
+                  {viewSub.status==='deleted' && <Btn variant="ghost" full onClick={()=>{updateStatus(viewSub.id,'pending',viewSub.name);setViewSub(null)}}>🔄 Restore to Pending</Btn>}
+                  {viewSub.status !== 'deleted' && <Btn variant="ghost" onClick={() => { openEdit(viewSub); setViewSub(null) }}>✏️ Edit</Btn>}
                   <Btn variant="ghost" onClick={() => setViewSub(null)}>Close</Btn>
                 </div>
               </div>
@@ -672,15 +761,15 @@ export default function Admin() {
                       <label style={{ padding:'6px 14px', borderRadius:7, border:'1.5px solid var(--blue)', color:'var(--blue)', fontSize:12, fontWeight:700, cursor:'pointer', background:'var(--blue-s)' }}>
                         📷 {editPhoto ? 'Change Photo' : 'Upload Photo'}
                         <input type="file" accept="image/*" style={{ display:'none' }}
-                          onChange={e => {
-                            const file = e.target.files?.[0]
-                            if (!file) return
-                            if (file.size > 10 * 1024 * 1024) { toast.error('Image must be under 10MB'); return }
-                            const reader = new FileReader()
-                            reader.onload = ev => setEditPhoto({ dataUrl: ev.target.result, name: file.name })
-                            reader.readAsDataURL(file)
-                            e.target.value = ''
-                          }}
+                           onChange={e => {
+                             const file = e.target.files?.[0]
+                             if (!file) return
+                             if (file.size > 10 * 1024 * 1024) { toast.error('Image must be under 10MB'); return }
+                             const reader = new FileReader()
+                             reader.onload = ev => setEditPhoto({ dataUrl: ev.target.result, name: file.name })
+                             reader.readAsDataURL(file)
+                             e.target.value = ''
+                           }}
                         />
                       </label>
                       {editPhoto && (
@@ -723,9 +812,43 @@ export default function Admin() {
           })()}
         </Modal>
 
-        {/* Delete confirm */}
-        <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteSubmission(deleteId)} title="Delete Submission" message="This will permanently delete this submission. This action cannot be undone." confirmLabel="Delete" danger />
-        <ConfirmDialog open={bulkDeleteIds.length > 0} onClose={() => setBulkDeleteIds([])} onConfirm={() => bulkDeleteSubmissions(bulkDeleteIds).then(() => { setSelected([]); setBulkDeleteIds([]) })} title={`Delete ${bulkDeleteIds.length} Submission${bulkDeleteIds.length > 1 ? 's' : ''}`} message={`This will permanently delete ${bulkDeleteIds.length} selected submission${bulkDeleteIds.length > 1 ? 's' : ''}. This action cannot be undone.`} confirmLabel="Delete All" danger />
+        {/* Delete confirms */}
+        <ConfirmDialog 
+          open={!!deleteId} 
+          onClose={() => setDeleteId(null)} 
+          onConfirm={() => {
+            if (filterStat === 'deleted') {
+              hardDeleteSubmission(deleteId)
+            } else {
+              deleteSubmission(deleteId)
+            }
+          }} 
+          title={filterStat === 'deleted' ? "Permanently Delete Submission" : "Move to Deleted"} 
+          message={filterStat === 'deleted' 
+            ? "This will permanently delete this submission from the database. This action cannot be undone." 
+            : "This will move this submission to the Deleted tab. You can restore it later."
+          } 
+          confirmLabel={filterStat === 'deleted' ? "Delete Permanently" : "Move to Deleted"} 
+          danger 
+        />
+        <ConfirmDialog 
+          open={bulkDeleteIds.length > 0} 
+          onClose={() => setBulkDeleteIds([])} 
+          onConfirm={() => {
+            if (filterStat === 'deleted') {
+              bulkHardDeleteSubmissions(bulkDeleteIds).then(() => { setSelected([]); setBulkDeleteIds([]) })
+            } else {
+              bulkDeleteSubmissions(bulkDeleteIds).then(() => { setSelected([]); setBulkDeleteIds([]) })
+            }
+          }} 
+          title={filterStat === 'deleted' ? `Permanently Delete ${bulkDeleteIds.length} Submissions` : `Move ${bulkDeleteIds.length} Submissions to Deleted`} 
+          message={filterStat === 'deleted'
+            ? `This will permanently delete ${bulkDeleteIds.length} selected submissions from the database. This action cannot be undone.`
+            : `This will move ${bulkDeleteIds.length} selected submissions to the Deleted tab. You can restore them later.`
+          } 
+          confirmLabel={filterStat === 'deleted' ? "Delete Permanently" : "Move to Deleted"} 
+          danger 
+        />
       </div>
     </div>
   )
