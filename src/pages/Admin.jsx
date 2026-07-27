@@ -169,7 +169,7 @@ export default function Admin() {
     const list = filterType !== 'All'
       ? organizations.filter(o => o.type === filterType)
       : organizations
-    return [...new Set(list.map(o => o.name).filter(Boolean))].sort()
+    return [...new Set(list.map(o => o.name?.trim()).filter(Boolean))].sort()
   }, [organizations, filterType])
 
   // If the selected org no longer belongs to the newly selected type, reset it

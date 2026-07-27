@@ -129,7 +129,7 @@ export function SubmissionsProvider({ children }) {
       }
     }
     if (filterRole !== 'All') c.push(where('role',        '==', filterRole))
-    if (filterSch  !== 'All') c.push(where('school_name', '==', filterSch))
+    if (filterSch  !== 'All') c.push(where('school_name', '==', filterSch.trim()))
 
     const sortField = sortBy === 'name_asc' ? 'name' : 'submitted_at'
     const sortDir   = (sortBy === 'date_asc' || sortBy === 'name_asc') ? 'asc' : 'desc'
@@ -149,7 +149,7 @@ export function SubmissionsProvider({ children }) {
       const { filterRole, filterSch, filterStat, dateFilterType, filterDate, filterStartDate, filterEndDate } = filters
       const base = []
       if (filterRole !== 'All') base.push(where('role',        '==', filterRole))
-      if (filterSch  !== 'All') base.push(where('school_name', '==', filterSch))
+      if (filterSch  !== 'All') base.push(where('school_name', '==', filterSch.trim()))
 
       const hasDateFilter = (dateFilterType === 'single' && filterDate) || (dateFilterType === 'range' && (filterStartDate || filterEndDate))
 
@@ -521,7 +521,7 @@ export function SubmissionsProvider({ children }) {
       }
     }
     if (filterRole !== 'All') c.push(where('role',        '==', filterRole))
-    if (filterSch  !== 'All') c.push(where('school_name', '==', filterSch))
+    if (filterSch  !== 'All') c.push(where('school_name', '==', filterSch.trim()))
 
     let dateField = 'submitted_at'
     if (filterStat === 'approved') dateField = 'approved_at'

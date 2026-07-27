@@ -14,6 +14,7 @@ import toast from 'react-hot-toast'
 
 const PAGE_SIZE = 25
 
+ 
 
 /* ── Responsive hook ─────────────────────────────────────── */
 function useWindowWidth() {
@@ -574,9 +575,9 @@ export default function AllTemplates() {
         where('status', '==', 'approved'),
         orderBy('submitted_at', 'desc'),
       ]
-      if (school        !== 'All') constraints.push(where('school_name', '==', school))
-      if (filterClass   !== 'All') constraints.push(where('class',       '==', filterClass))
-      if (filterSection !== 'All') constraints.push(where('section',     '==', filterSection))
+      if (school        !== 'All') constraints.push(where('school_name', '==', school.trim()))
+      if (filterClass   !== 'All') constraints.push(where('class',       '==', filterClass.trim()))
+      if (filterSection !== 'All') constraints.push(where('section',     '==', filterSection.trim()))
 
       let cursorChain = [...cursors]
       while (cursorChain.length < pageNum) {
@@ -628,7 +629,7 @@ export default function AllTemplates() {
     const fetchClasses = async () => {
       try {
         const constraints = [where('status', '==', 'approved')]
-        if (school !== 'All') constraints.push(where('school_name', '==', school))
+        if (school !== 'All') constraints.push(where('school_name', '==', school.trim()))
         // Fetch enough docs to cover all classes; class field is low-cardinality
         constraints.push(limit(1000))
         const snap = await getDocs(query(collection(db, 'submissions'), ...constraints))
@@ -653,8 +654,8 @@ export default function AllTemplates() {
     const fetchSections = async () => {
       try {
         const constraints = [where('status', '==', 'approved')]
-        if (school !== 'All') constraints.push(where('school_name', '==', school))
-        if (filterClass !== 'All') constraints.push(where('class', '==', filterClass))
+        if (school !== 'All') constraints.push(where('school_name', '==', school.trim()))
+        if (filterClass !== 'All') constraints.push(where('class', '==', filterClass.trim()))
         constraints.push(limit(1000))
         const snap = await getDocs(query(collection(db, 'submissions'), ...constraints))
         if (cancelled) return
@@ -696,9 +697,9 @@ export default function AllTemplates() {
       where('status', '==', 'approved'),
       orderBy('submitted_at', 'desc'),
     ]
-    if (school        !== 'All') base.push(where('school_name', '==', school))
-    if (filterClass   !== 'All') base.push(where('class',       '==', filterClass))
-    if (filterSection !== 'All') base.push(where('section',     '==', filterSection))
+    if (school        !== 'All') base.push(where('school_name', '==', school.trim()))
+    if (filterClass   !== 'All') base.push(where('class',       '==', filterClass.trim()))
+    if (filterSection !== 'All') base.push(where('section',     '==', filterSection.trim()))
     return base
   }, [school, filterClass, filterSection])
 
