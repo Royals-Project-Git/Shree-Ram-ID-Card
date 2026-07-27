@@ -465,6 +465,7 @@ function _gfp(config, key) {
 function _gfs(config, key) { return config.fieldStyles?.[key] || {} }
 
 function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClick, onValueChange, effectiveLabelW, isIndividual }) {
+  const editingRef = useRef(false)
   const fs        = _gfs(config, f.key)
   const highlight = fs.highlight || false
   const pos       = _gfp(config, f.key)
@@ -488,7 +489,7 @@ function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClic
 
   if (highlight) {
     return (
-      <div key={f.key} onMouseDown={onMouseDown} onClick={onClick}
+      <div key={f.key} onMouseDown={e => { if (e.target.isContentEditable || editingRef.current) return; onMouseDown(e) }} onClick={onClick}
         style={{ position:'absolute', left:pos.x, top:topY, zIndex:isSel?60:10,
           maxWidth: fieldMaxW,
           background:bgColor, borderRadius:brad, padding:`${padY}px ${padX}px`, minWidth:80,
@@ -499,25 +500,26 @@ function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClic
           suppressContentEditableWarning
           onMouseDown={e => e.stopPropagation()}
           onFocus={e => {
+            editingRef.current = true
             if (hasPlaceholder) {
-              e.currentTarget.textContent = ''
+              e.currentTarget.innerHTML = ''
             }
           }}
           onBlur={e => {
+            editingRef.current = false
             const txt = e.currentTarget.textContent.trim()
             if (onValueChange) {
               onValueChange(f.key, txt === `[${f.label}]` || !txt ? '' : txt)
             }
           }}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+          dangerouslySetInnerHTML={{ __html: displayVal || '' }}
           style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
             letterSpacing:uppercase?1.5:0.2,
             textTransform:uppercase?'uppercase':'none', display:'block', fontFamily:fontFam,
             wordBreak:'break-word', overflowWrap:'break-word',
             outline:'none', cursor: isIndividual ? 'text' : 'inherit'
-          }}>
-          {displayVal}
-        </span>
+          }} />
         {isSel && (
           <div style={{ position:'absolute', top:-16, left:0, fontSize:9, color:c1, fontWeight:700,
             whiteSpace:'nowrap', background:'#fff', padding:'1px 5px', borderRadius:4,
@@ -530,7 +532,7 @@ function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClic
   const labelW = effectiveLabelW || config.labelWidth || 90
 
   return (
-    <div key={f.key} onMouseDown={onMouseDown} onClick={onClick}
+    <div key={f.key} onMouseDown={e => { if (e.target.isContentEditable || editingRef.current) return; onMouseDown(e) }} onClick={onClick}
       style={{ position:'absolute', left:pos.x, top:topY, zIndex:isSel?60:10,
         maxWidth: fieldMaxW,
         padding:`${padY}px ${padX}px`, borderRadius:5, minWidth:55,
@@ -545,22 +547,25 @@ function DragField({ f, config, val, isSel, isMul, shiftedY, onMouseDown, onClic
           suppressContentEditableWarning
           onMouseDown={e => e.stopPropagation()}
           onFocus={e => {
+            editingRef.current = true
             if (hasPlaceholder) {
-              e.currentTarget.textContent = ''
+              e.currentTarget.innerHTML = ''
             }
           }}
           onBlur={e => {
+            editingRef.current = false
             const txt = e.currentTarget.textContent.trim()
             if (onValueChange) {
               onValueChange(f.key, txt === `[${f.label}]` || !txt ? '' : txt)
             }
           }}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+          dangerouslySetInnerHTML={{ __html: displayVal || '' }}
           style={{ fontSize:fSize, fontWeight:fWeight, color:textColor,
             textTransform:uppercase?'uppercase':'none', fontFamily:fontFam,
             wordBreak:'break-word', overflowWrap:'break-word', minWidth:0, lineHeight:1.3,
             flex:1, outline:'none', cursor: isIndividual ? 'text' : 'inherit'
-          }}>{displayVal}</span>
+          }} />
       </div>
       {isSel && (
         <div style={{ position:'absolute', top:-16, left:0, fontSize:9, color:c1, fontWeight:700,
@@ -606,6 +611,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
   }, [config])
 
   const startDrag = (e, key, curX, curY) => {
+    if (e.target.isContentEditable) return
     e.preventDefault(); e.stopPropagation()
     onSelect(key)
     isDragging.current = false
@@ -707,9 +713,8 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                 if (onValueChange) onValueChange('school_name', e.currentTarget.textContent.trim())
               }}
               onKeyDown={e => { if (e.key==='Enter') { e.preventDefault(); e.currentTarget.blur() } }}
-              style={{ fontFamily:'Outfit,sans-serif', fontSize:12, fontWeight:800, color:'#fff', lineHeight:1.3, outline:'none', cursor: isIndividual ? 'text' : 'inherit' }}>
-              {sub?.school_name || orgName || 'Organization Name'}
-            </div>
+              dangerouslySetInnerHTML={{ __html: sub?.school_name || orgName || 'Organization Name' }}
+              style={{ fontFamily:'Outfit,sans-serif', fontSize:12, fontWeight:800, color:'#fff', lineHeight:1.3, outline:'none', cursor: isIndividual ? 'text' : 'inherit' }} />
             <div style={{ fontSize:9, color:'rgba(255,255,255,.75)', marginTop:2, display:'flex', alignItems:'center', justifyContent:config.logoPosition==='center'?'center':'flex-start' }}>
               <span
                 contentEditable={isIndividual}
@@ -719,9 +724,8 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                   if (onValueChange) onValueChange('role', e.currentTarget.textContent.trim())
                 }}
                 onKeyDown={e => { if (e.key==='Enter') { e.preventDefault(); e.currentTarget.blur() } }}
-                style={{ fontWeight:700, outline:'none', cursor: isIndividual ? 'text' : 'inherit' }}>
-                {sub?.role || 'Student'}
-              </span>
+                dangerouslySetInnerHTML={{ __html: sub?.role || 'Student' }}
+                style={{ fontWeight:700, outline:'none', cursor: isIndividual ? 'text' : 'inherit' }} />
               <span style={{ marginLeft:4 }}>Identity Card</span>
             </div>
           </div>
@@ -839,7 +843,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                         onMouseDown={e => e.stopPropagation()}
                         onFocus={e => {
                           if (hasPlaceholder) {
-                            e.currentTarget.textContent = ''
+                            e.currentTarget.innerHTML = ''
                           }
                         }}
                         onBlur={e => {
@@ -849,12 +853,13 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                           }
                         }}
                         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+                        dangerouslySetInnerHTML={{ __html: displayVal || '' }}
                         style={{
                           fontSize: ffSize, fontWeight: ffWeight, color: textColor,
                           letterSpacing: uppercase ? 1.5 : 0.2, textTransform: uppercase ? 'uppercase' : 'none',
                           fontFamily: fontFam,
                           outline: 'none', cursor: isIndividual ? 'text' : 'default'
-                        }}>{displayVal}</span>
+                        }} />
 
                       {f.key === 'class' && hasSection && (() => {
                         const secField = present.find(pf => pf.key === 'section')
@@ -871,7 +876,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                             suppressContentEditableWarning
                             onMouseDown={e => e.stopPropagation()}
                             onFocus={e => {
-                              if (secHasPlaceholder) e.currentTarget.textContent = ''
+                              if (secHasPlaceholder) e.currentTarget.innerHTML = ''
                             }}
                             onBlur={e => {
                               const txt = e.currentTarget.textContent.trim()
@@ -880,6 +885,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                               }
                             }}
                             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+                            dangerouslySetInnerHTML={{ __html: secDisplayVal || '' }}
                             style={{
                               fontSize: ffSize, fontWeight: ffWeight, color: textColor,
                               letterSpacing: uppercase ? 1.5 : 0.2, textTransform: uppercase ? 'uppercase' : 'none',
@@ -889,7 +895,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                               border: secIsSel ? `1.5px dashed rgba(255,255,255,.7)` : '2px dashed transparent',
                               background: secIsSel ? `${config.c1}09` : 'transparent',
                               borderRadius: 3
-                            }}>{secDisplayVal}</span>
+                            }} />
                         )
                       })()}
                     </div>
@@ -923,7 +929,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                       onMouseDown={e => e.stopPropagation()}
                       onFocus={e => {
                         if (hasPlaceholder) {
-                          e.currentTarget.textContent = ''
+                          e.currentTarget.innerHTML = ''
                         }
                       }}
                       onBlur={e => {
@@ -933,13 +939,14 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                         }
                       }}
                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+                      dangerouslySetInnerHTML={{ __html: displayVal || '' }}
                       style={{
                         fontSize: ffSize, fontWeight: ffWeight, color: textColor,
                         lineHeight: 1.3,
                         textTransform: uppercase ? 'uppercase' : 'none',
                         fontFamily: fontFam,
                         outline: 'none', cursor: isIndividual ? 'text' : 'default'
-                      }}>{displayVal}</span>
+                      }} />
 
                     {f.key === 'class' && hasSection && (() => {
                       const secField = present.find(pf => pf.key === 'section')
@@ -956,7 +963,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                           suppressContentEditableWarning
                           onMouseDown={e => e.stopPropagation()}
                           onFocus={e => {
-                            if (secHasPlaceholder) e.currentTarget.textContent = ''
+                            if (secHasPlaceholder) e.currentTarget.innerHTML = ''
                           }}
                           onBlur={e => {
                             const txt = e.currentTarget.textContent.trim()
@@ -965,6 +972,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                             }
                           }}
                           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+                          dangerouslySetInnerHTML={{ __html: secDisplayVal || '' }}
                           style={{
                             fontSize: ffSize, fontWeight: ffWeight, color: textColor,
                             lineHeight: 1.3,
@@ -975,7 +983,7 @@ function CardCanvas({ config, sub, orgName, onMove, selected, onSelect, multiSel
                             border: secIsSel ? `1.5px dashed ${config.c1}` : '1.5px dashed transparent',
                             background: secIsSel ? `${config.c1}09` : 'transparent',
                             borderRadius: 3
-                          }}>{secDisplayVal}</span>
+                          }} />
                       )
                     })()}
                   </div>
@@ -1253,7 +1261,20 @@ export default function IDCardBuilder() {
   const tplId         = searchParams.get('tpl')
 
   const approved   = submissions.filter(s => s.status==='approved')
-  const [customPreviewSub, setCustomPreviewSub] = useState(null)
+  const [customPreviewSub, setCustomPreviewSubState] = useState(null)
+  const customPreviewSubRef = useRef(null)
+  const setCustomPreviewSub = useCallback((valOrFn) => {
+    if (typeof valOrFn === 'function') {
+      setCustomPreviewSubState(prev => {
+        const next = valOrFn(prev)
+        customPreviewSubRef.current = next
+        return next
+      })
+    } else {
+      customPreviewSubRef.current = valOrFn
+      setCustomPreviewSubState(valOrFn)
+    }
+  }, [])
   const previewSub = customPreviewSub || approved[previewIdx] || null
 
   const handleValueChange = useCallback((key, newValue) => {
@@ -1468,19 +1489,20 @@ export default function IDCardBuilder() {
           }
         }
 
+        const latestSub = customPreviewSubRef.current
         const fieldsToUpdate = { customConfig: config }
-        if (customPreviewSub) {
+        if (latestSub) {
           ALL_FIELDS.forEach(f => {
-            if (customPreviewSub[f.key] !== undefined) {
-              fieldsToUpdate[f.key] = customPreviewSub[f.key]
+            if (latestSub[f.key] !== undefined) {
+              fieldsToUpdate[f.key] = latestSub[f.key]
             }
           })
-          if (customPreviewSub.school_name !== undefined) fieldsToUpdate.school_name = customPreviewSub.school_name
-          if (customPreviewSub.role !== undefined) fieldsToUpdate.role = customPreviewSub.role
+          if (latestSub.school_name !== undefined) fieldsToUpdate.school_name = latestSub.school_name
+          if (latestSub.role !== undefined) fieldsToUpdate.role = latestSub.role
           if (uploadedUrl) {
             fieldsToUpdate.photo_url = uploadedUrl
-          } else if (customPreviewSub.photo_url !== undefined && !customPreviewSub.photo_url.startsWith('data:')) {
-            fieldsToUpdate.photo_url = customPreviewSub.photo_url
+          } else if (latestSub.photo_url !== undefined && !latestSub.photo_url.startsWith('data:')) {
+            fieldsToUpdate.photo_url = latestSub.photo_url
           }
         }
 
