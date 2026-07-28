@@ -692,10 +692,13 @@ export default function AllTemplates() {
   const cols     = Math.max(1, Math.floor(centerW / (cardNatW + 22)))
 
   /* ── Build Firestore base constraints for current filters ── */
+  // NOTE: orderBy is intentionally omitted here. This function is only used by
+  // fetchPageRange (ZIP download), where sort order doesn't matter. Adding orderBy
+  // combined with equality filters (school_name, class, section) requires a Firestore
+  // composite index that may not exist — causing class-wise downloads to fail silently.
   const buildBaseConstraints = useCallback(() => {
     const base = [
       where('status', '==', 'approved'),
-      orderBy('submitted_at', 'desc'),
     ]
     if (school        !== 'All') base.push(where('school_name', '==', school.trim()))
     if (filterClass   !== 'All') base.push(where('class',       '==', filterClass.trim()))
@@ -948,13 +951,22 @@ export default function AllTemplates() {
     const fetchCount = async () => {
       try {
         const constraints = [where('status', '==', 'approved')]
-        if (school        !== 'All') constraints.push(where('school_name', '==', school))
-        if (filterClass   !== 'All') constraints.push(where('class',       '==', filterClass))
-        if (filterSection !== 'All') constraints.push(where('section',     '==', filterSection))
-        const snap = await getCountFromServer(query(collection(db, 'submissions'), ...constraints))
-        if (!cancelled) setTotalApprovedCount(snap.data().count)
+        if (school        !== 'All') constraints.push(where('school_name', '==', school.trim()))
+        if (filterClass   !== 'All') constraints.push(where('class',       '==', filterClass.trim()))
+        if (filterSection !== 'All') constraints.push(where('section',     '==', filterSection.trim()))
+        // Try getCountFromServer first; it may fail if a Firestore composite index is missing
+        try {
+          const snap = await getCountFromServer(query(collection(db, 'submissions'), ...constraints))
+          if (!cancelled) setTotalApprovedCount(snap.data().count)
+        } catch {
+          // Fallback: fetch actual docs and count them (works without composite index)
+          const fallbackConstraints = [...constraints, limit(1000)]
+          const snap = await getDocs(query(collection(db, 'submissions'), ...fallbackConstraints))
+          if (!cancelled) setTotalApprovedCount(snap.size)
+        }
       } catch (err) {
         console.warn('Count fetch failed:', err)
+        if (!cancelled) setTotalApprovedCount(0)
       }
     }
     fetchCount()
