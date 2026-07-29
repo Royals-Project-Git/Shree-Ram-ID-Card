@@ -723,42 +723,74 @@ export default function AllTemplates() {
   const centerW  = winW - panelW - rightW - 48
   const cols     = Math.max(1, Math.floor(centerW / (cardNatW + 22)))
 
-  /* ── Build Firestore base constraints for current filters ── */
-  // NOTE: orderBy is intentionally omitted here. This function is only used by
-  // fetchPageRange (ZIP download), where sort order doesn't matter. Adding orderBy
-  // combined with equality filters (school_name, class, section) requires a Firestore
-  // composite index that may not exist — causing class-wise downloads to fail silently.
+  /* ── Build Firestore base constraints (school/status only, no class/section) ── */
+  // class and section filtering is done in JS to avoid compound Firestore queries
+  // that require composite indexes and can silently return 0 results.
   const buildBaseConstraints = useCallback(() => {
     const base = [
       where('status', '==', 'approved'),
+      orderBy('submitted_at', 'desc'),   // ← required for stable startAfter cursor pagination
     ]
-    if (school        !== 'All') base.push(where('school_name', '==', school.trim()))
-    if (filterClass   !== 'All') base.push(where('class',       '==', filterClass.trim()))
-    if (filterSection !== 'All') base.push(where('section',     '==', filterSection.trim()))
+    if (school !== 'All') base.push(where('school_name', '==', school.trim()))
     return base
-  }, [school, filterClass, filterSection])
+  }, [school])
 
   /* ── Fetch a range of pages directly from Firestore ──────── */
   const fetchPageRange = useCallback(async (fromPage, toPage) => {
-    const base    = buildBaseConstraints()
-    const results = []
-    let cursor    = null
+    const needsJsFilter = filterClass !== 'All' || filterSection !== 'All'
+    const fsBase = buildBaseConstraints()  // status + orderBy + school_name
 
-    for (let p = 1; p <= toPage; p++) {
-      const constraints = [...base]
-      if (cursor) constraints.push(startAfter(cursor))
-      constraints.push(limit(PAGE_SIZE))
-
-      const snap = await getDocs(query(collection(db, 'submissions'), ...constraints))
-      if (snap.empty) break
-
-      if (p >= fromPage) {
-        snap.docs.forEach(d => results.push({ id: d.id, ...d.data() }))
+    if (!needsJsFilter) {
+      // ── No class/section filter: use efficient Firestore cursor pagination ──
+      const results = []
+      let cursor = null
+      for (let p = 1; p <= toPage; p++) {
+        const constraints = [...fsBase]
+        if (cursor) constraints.push(startAfter(cursor))
+        constraints.push(limit(PAGE_SIZE))
+        const snap = await getDocs(query(collection(db, 'submissions'), ...constraints))
+        if (snap.empty) break
+        if (p >= fromPage) {
+          snap.docs.forEach(d => results.push({ id: d.id, ...d.data() }))
+        }
+        cursor = snap.docs[snap.docs.length - 1]
       }
-      cursor = snap.docs[snap.docs.length - 1]
+      return results
+    } else {
+      // ── Class/section filter active: fetch all school docs, filter in JS ──
+      // Avoids compound Firestore queries that require composite indexes.
+      // Uses ordered pagination (startAfter works correctly since orderBy is present).
+      const BATCH = 300
+      let allDocs = []
+      let lastDoc = null
+      while (allDocs.length < 5000) {
+        const batchC = [...fsBase]
+        if (lastDoc) batchC.push(startAfter(lastDoc))
+        batchC.push(limit(BATCH))
+        const snap = await getDocs(query(collection(db, 'submissions'), ...batchC))
+        if (snap.empty) break
+        allDocs.push(...snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        lastDoc = snap.docs[snap.docs.length - 1]
+        if (snap.docs.length < BATCH) break  // last page reached
+      }
+
+      // JS filter — normalize both sides to handle whitespace/case mismatches in stored data
+      let filteredDocs = allDocs
+      if (filterClass !== 'All') {
+        const target = filterClass.trim().toLowerCase()
+        filteredDocs = filteredDocs.filter(d => (d.class || '').trim().toLowerCase() === target)
+      }
+      if (filterSection !== 'All') {
+        const target = filterSection.trim().toLowerCase()
+        filteredDocs = filteredDocs.filter(d => (d.section || '').trim().toLowerCase() === target)
+      }
+
+      // Return the slice corresponding to the requested page range
+      const start = (fromPage - 1) * PAGE_SIZE
+      const end   = toPage * PAGE_SIZE
+      return filteredDocs.slice(start, end)
     }
-    return results
-  }, [buildBaseConstraints])
+  }, [buildBaseConstraints, filterClass, filterSection])
 
   /* ── Render one card off-screen and capture it ───────────── */
   // Convert any URL to a base64 data URL by fetching through a proxy approach
