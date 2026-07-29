@@ -178,7 +178,7 @@ export function SubmissionsProvider({ children }) {
         } else if (filterStat === 'deleted') {
           setTotalCount(delCount)
         } else {
-          setTotalCount(appCount + penCount + rejCount)
+          setTotalCount(appCount + penCount + rejCount + delCount)
         }
       } else {
         // No date filter active — use fast server-side aggregation counts (no index required!)
@@ -208,7 +208,7 @@ export function SubmissionsProvider({ children }) {
         } else if (filterStat === 'deleted') {
           setTotalCount(delVal)
         } else {
-          setTotalCount(appVal + penVal + rejVal)
+          setTotalCount(appVal + penVal + rejVal + delVal)
         }
       }
     } catch (err) {

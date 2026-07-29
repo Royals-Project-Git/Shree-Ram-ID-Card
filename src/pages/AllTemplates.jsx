@@ -571,39 +571,71 @@ export default function AllTemplates() {
     const { school, filterClass, filterSection } = filters
     setDisplayLoading(true)
     try {
-      const constraints = [
-        where('status', '==', 'approved'),
-        orderBy('submitted_at', 'desc'),
-      ]
-      if (school        !== 'All') constraints.push(where('school_name', '==', school.trim()))
-      if (filterClass   !== 'All') constraints.push(where('class',       '==', filterClass.trim()))
-      if (filterSection !== 'All') constraints.push(where('section',     '==', filterSection.trim()))
+      const needsJsFilter = filterClass !== 'All' || filterSection !== 'All'
 
-      let cursorChain = [...cursors]
-      while (cursorChain.length < pageNum) {
-        const prevCursor = cursorChain[cursorChain.length - 1]
-        const walkConstraints = [...constraints]
-        if (prevCursor) walkConstraints.push(startAfter(prevCursor))
-        walkConstraints.push(limit(PAGE_SIZE))
-        const snap = await getDocs(query(collection(db, 'submissions'), ...walkConstraints))
-        if (snap.empty) break
-        cursorChain.push(snap.docs[snap.docs.length - 1])
+      // Firestore base: always filter by status + school_name (reliable, always indexed)
+      const fsBase = [where('status', '==', 'approved'), orderBy('submitted_at', 'desc')]
+      if (school !== 'All') fsBase.push(where('school_name', '==', school.trim()))
+
+      if (!needsJsFilter) {
+        // ── No class/section filter → use efficient Firestore cursor pagination ──
+        let cursorChain = [...cursors]
+        while (cursorChain.length < pageNum) {
+          const prevCursor = cursorChain[cursorChain.length - 1]
+          const wc = [...fsBase]
+          if (prevCursor) wc.push(startAfter(prevCursor))
+          wc.push(limit(PAGE_SIZE))
+          const snap = await getDocs(query(collection(db, 'submissions'), ...wc))
+          if (snap.empty) break
+          cursorChain.push(snap.docs[snap.docs.length - 1])
+        }
+        const targetCursor = cursorChain[pageNum - 1]
+        const pc = [...fsBase]
+        if (targetCursor) pc.push(startAfter(targetCursor))
+        pc.push(limit(PAGE_SIZE))
+        const snap = await getDocs(query(collection(db, 'submissions'), ...pc))
+        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        const newCursors = [...cursorChain]
+        newCursors[pageNum] = snap.docs[snap.docs.length - 1] || null
+        setDisplayCards(docs)
+        setDisplayCursors(newCursors)
+        setDisplayPage(pageNum)
+      } else {
+        // ── Class/section filter active → fetch all school docs, filter in JS ──
+        // This avoids compound Firestore queries needing composite indexes,
+        // and handles any whitespace/case inconsistencies in stored class values.
+        const BATCH = 300
+        let allDocs = []
+        let lastDoc = null
+        while (allDocs.length < 5000) {
+          const batchC = [...fsBase]
+          if (lastDoc) batchC.push(startAfter(lastDoc))
+          batchC.push(limit(BATCH))
+          const snap = await getDocs(query(collection(db, 'submissions'), ...batchC))
+          if (snap.empty) break
+          allDocs.push(...snap.docs.map(d => ({ id: d.id, ...d.data() })))
+          lastDoc = snap.docs[snap.docs.length - 1]
+          if (snap.docs.length < BATCH) break
+        }
+
+        // JS filter — normalize both sides to handle whitespace/case mismatches in stored data
+        let filteredDocs = allDocs
+        if (filterClass !== 'All') {
+          const target = filterClass.trim().toLowerCase()
+          filteredDocs = filteredDocs.filter(d => (d.class || '').trim().toLowerCase() === target)
+        }
+        if (filterSection !== 'All') {
+          const target = filterSection.trim().toLowerCase()
+          filteredDocs = filteredDocs.filter(d => (d.section || '').trim().toLowerCase() === target)
+        }
+
+        // JS pagination
+        const start = (pageNum - 1) * PAGE_SIZE
+        const docs = filteredDocs.slice(start, start + PAGE_SIZE)
+        setDisplayCards(docs)
+        setDisplayPage(pageNum)
+        setDisplayCursors([null]) // cursors not used in JS-pagination mode
       }
-
-      const targetCursor = cursorChain[pageNum - 1]
-      const pageConstraints = [...constraints]
-      if (targetCursor) pageConstraints.push(startAfter(targetCursor))
-      pageConstraints.push(limit(PAGE_SIZE))
-
-      const snap = await getDocs(query(collection(db, 'submissions'), ...pageConstraints))
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-
-      const newCursors = [...cursorChain]
-      newCursors[pageNum] = snap.docs[snap.docs.length - 1] || null
-
-      setDisplayCards(docs)
-      setDisplayCursors(newCursors)
-      setDisplayPage(pageNum)
     } catch (err) {
       console.warn('Display page fetch failed:', err)
       setDisplayCards([])
@@ -950,19 +982,37 @@ export default function AllTemplates() {
     let cancelled = false
     const fetchCount = async () => {
       try {
-        const constraints = [where('status', '==', 'approved')]
-        if (school        !== 'All') constraints.push(where('school_name', '==', school.trim()))
-        if (filterClass   !== 'All') constraints.push(where('class',       '==', filterClass.trim()))
-        if (filterSection !== 'All') constraints.push(where('section',     '==', filterSection.trim()))
-        // Try getCountFromServer first; it may fail if a Firestore composite index is missing
-        try {
-          const snap = await getCountFromServer(query(collection(db, 'submissions'), ...constraints))
-          if (!cancelled) setTotalApprovedCount(snap.data().count)
-        } catch {
-          // Fallback: fetch actual docs and count them (works without composite index)
-          const fallbackConstraints = [...constraints, limit(1000)]
-          const snap = await getDocs(query(collection(db, 'submissions'), ...fallbackConstraints))
-          if (!cancelled) setTotalApprovedCount(snap.size)
+        const needsJsFilter = filterClass !== 'All' || filterSection !== 'All'
+
+        if (!needsJsFilter) {
+          // Fast path: no class/section filter — use server-side count
+          const constraints = [where('status', '==', 'approved')]
+          if (school !== 'All') constraints.push(where('school_name', '==', school.trim()))
+          try {
+            const snap = await getCountFromServer(query(collection(db, 'submissions'), ...constraints))
+            if (!cancelled) setTotalApprovedCount(snap.data().count)
+          } catch {
+            const snap = await getDocs(query(collection(db, 'submissions'), ...constraints, limit(5000)))
+            if (!cancelled) setTotalApprovedCount(snap.size)
+          }
+        } else {
+          // Class/section filter active — fetch school docs and count in JS
+          // Avoids compound Firestore queries that require composite indexes
+          const constraints = [where('status', '==', 'approved')]
+          if (school !== 'All') constraints.push(where('school_name', '==', school.trim()))
+          constraints.push(limit(5000))
+          const snap = await getDocs(query(collection(db, 'submissions'), ...constraints))
+          if (cancelled) return
+          let docs = snap.docs.map(d => d.data())
+          if (filterClass !== 'All') {
+            const target = filterClass.trim().toLowerCase()
+            docs = docs.filter(d => (d.class || '').trim().toLowerCase() === target)
+          }
+          if (filterSection !== 'All') {
+            const target = filterSection.trim().toLowerCase()
+            docs = docs.filter(d => (d.section || '').trim().toLowerCase() === target)
+          }
+          if (!cancelled) setTotalApprovedCount(docs.length)
         }
       } catch (err) {
         console.warn('Count fetch failed:', err)
