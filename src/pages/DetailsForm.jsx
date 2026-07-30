@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useSubmissions } from '../hooks/useSubmissions'
 import { formConfigsApi, organizationsApi } from '../lib/firestore'
 import { Btn, Modal, Spinner } from '../components/shared/index'
+import CameraModal from '../components/CameraModal'
 import toast from 'react-hot-toast'
 import Cropper from 'react-easy-crop'
 import 'react-easy-crop/react-easy-crop.css'
@@ -265,6 +266,7 @@ export default function DetailsForm() {
   const [photoRaw,         setPhotoRaw]         = useState(null)
   const [photoCropped,     setPhotoCropped]     = useState(null)
   const [showCrop,         setShowCrop]         = useState(false)
+  const [showCamera,       setShowCamera]       = useState(false)
   const [showConfirm,      setShowConfirm]      = useState(false)
   const [submitting,       setSubmitting]       = useState(false)
   const [orgClassesConfig, setOrgClassesConfig] = useState([])
@@ -526,13 +528,19 @@ export default function DetailsForm() {
               <div style={{ marginBottom:24, paddingBottom:24, borderBottom:'1px solid var(--border)' }}>
                 <div style={{ fontSize:11,fontWeight:700,color:'var(--ink3)',textTransform:'uppercase',letterSpacing:.5,marginBottom:10 }}>📷 Profile Photo *</div>
                 {!photoCropped ? (
-                  <div onClick={()=>fileRef.current?.click()}
-                    style={{ border:`2px dashed ${errors.photo?'var(--red)':'var(--border2)'}`,borderRadius:12,padding:'28px 16px',textAlign:'center',cursor:'pointer',background:'var(--paper2)',transition:'all .2s' }}
-                    onMouseEnter={e=>{e.currentTarget.style.borderColor='#2352ff';e.currentTarget.style.background='var(--blue-s)'}}
-                    onMouseLeave={e=>{e.currentTarget.style.borderColor=errors.photo?'var(--red)':'var(--border2)';e.currentTarget.style.background='var(--paper2)'}}>
+                  <div
+                    style={{ border:`2px dashed ${errors.photo?'var(--red)':'var(--border2)'}`,borderRadius:12,padding:'28px 16px',textAlign:'center',background:'var(--paper2)',transition:'all .2s' }}>
                     <div style={{ fontSize:40,marginBottom:8 }}>📷</div>
-                    <div style={{ fontSize:14,fontWeight:700,color:'var(--ink2)',marginBottom:4 }}>Tap to upload your photo</div>
-                    <div style={{ fontSize:12,color:'var(--ink3)' }}>JPG, PNG or WEBP · Max 10MB</div>
+                    <div style={{ fontSize:14,fontWeight:700,color:'var(--ink2)',marginBottom:12 }}>Add a profile photo using your camera or gallery</div>
+                    <div style={{ display:'flex', gap:10, justifyContent:'center', flexWrap:'wrap', marginBottom:8 }}>
+                      <Btn variant="soft" onClick={()=>setShowCamera(true)}>
+                        📸 Take Photo
+                      </Btn>
+                      <Btn variant="ghost" onClick={()=>fileRef.current?.click()}>
+                        📁 Choose from Gallery
+                      </Btn>
+                    </div>
+                    <div style={{ fontSize:11,color:'var(--ink3)' }}>JPG, PNG or WEBP · Max 10MB</div>
                     <input type="file" ref={fileRef} accept="image/jpeg,image/png,image/webp" onChange={handlePhoto} style={{ display:'none' }}/>
                   </div>
                 ) : (
@@ -546,7 +554,8 @@ export default function DetailsForm() {
                       <div style={{ fontSize:12,color:'var(--ink2)',marginBottom:12,lineHeight:1.5 }}>Cropped to 3:4 ratio for your ID card.</div>
                       <div style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
                         <Btn size="sm" variant="soft"  onClick={()=>setShowCrop(true)}>✂ Re-crop</Btn>
-                        <Btn size="sm" variant="ghost" onClick={()=>fileRef.current?.click()}>🔄 Change</Btn>
+                        <Btn size="sm" variant="ghost" onClick={()=>setShowCamera(true)}>📸 Camera</Btn>
+                        <Btn size="sm" variant="ghost" onClick={()=>fileRef.current?.click()}>📁 Gallery</Btn>
                         <Btn size="sm" variant="ghost" style={{ color:'var(--red)' }} onClick={()=>{setPhotoCropped(null);setPhotoRaw(null)}}>🗑 Remove</Btn>
                       </div>
                       <input type="file" ref={fileRef} accept="image/jpeg,image/png,image/webp" onChange={handlePhoto} style={{ display:'none' }}/>
@@ -588,6 +597,8 @@ export default function DetailsForm() {
       </div>
 
       {photoRaw && <CropModal open={showCrop} imageUrl={photoRaw} onDone={setPhotoCropped} onClose={()=>setShowCrop(false)}/>}
+      
+      <CameraModal open={showCamera} onClose={() => setShowCamera(false)} onCapture={(dataUrl) => { setPhotoRaw(dataUrl); setShowCrop(true) }} />
 
       <Modal open={showConfirm} onClose={()=>!submitting&&setShowConfirm(false)} title="Confirm Submission" width={520}>
         <p style={{ fontSize:13,color:'var(--ink3)',marginBottom:16 }}>Please review your details before submitting. You cannot edit after submission.</p>

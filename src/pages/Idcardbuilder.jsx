@@ -4,6 +4,7 @@ import { useSubmissions } from '../hooks/useSubmissions'
 import { useOrganizations } from '../hooks/useOrganizations'
 import { useCardTemplates } from '../hooks/useCardtemplates'
 import { Btn, Spinner } from '../components/shared/index'
+import CameraModal from '../components/CameraModal'
 import { uploadBgImage } from '../lib/firebase'
 import toast from 'react-hot-toast'
 import QRCode from 'qrcode'
@@ -1252,6 +1253,7 @@ export default function IDCardBuilder() {
   const [flowStartXDraft, setFlowStartXDraft] = useState(null)
   const [qrSizeDraft,    setQrSizeDraft]    = useState(null)
   const [photoFileDraft, setPhotoFileDraft] = useState(null)
+  const [showCamera, setShowCamera] = useState(false)
 
   useEffect(() => { setFsFontDraft(null) }, [selected])  // reset per-field draft when switching fields
   const bgInputRef    = useRef(null)
@@ -1948,8 +1950,13 @@ export default function IDCardBuilder() {
                       placeholder="Photo URL or upload local file"
                       style={{ flex: 1, padding: '6px 8px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--paper)', color: 'var(--ink)', fontSize: 12, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
                     />
+                    <button type="button" onClick={() => setShowCamera(true)}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 10px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--paper2)', color: 'var(--ink2)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                      title="Take photo with camera">
+                      📸 Camera
+                    </button>
                     <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 10px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--paper2)', color: 'var(--ink2)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                      Upload
+                      📁 Gallery
                       <input type="file" accept="image/*" onChange={e => {
                         const file = e.target.files?.[0]
                         if (!file) return
@@ -2837,6 +2844,10 @@ export default function IDCardBuilder() {
       </div>
 
       <div className={`icb-drawer${panelOpen?' open':''}`}>{panelOpen ? PanelContent() : null}</div>
+      <CameraModal open={showCamera} onClose={() => setShowCamera(false)} onCapture={(dataUrl) => {
+        const newSub = { ...(previewSub || {}), photo_url: dataUrl }
+        setCustomPreviewSub(newSub)
+      }} />
     </div>
   )
 }

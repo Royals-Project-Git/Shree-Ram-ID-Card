@@ -4,6 +4,7 @@ import { useSubmissions, PAGE_SIZE } from '../hooks/useSubmissions'
 import { useOrganizations } from '../hooks/useOrganizations'
 import { submissionsApi } from '../lib/firestore'
 import { Badge, Btn, Card, Avatar, Modal, Spinner, EmptyState, ConfirmDialog } from '../components/shared/index'
+import CameraModal from '../components/CameraModal'
 import toast from 'react-hot-toast'
 
 const formatDOB = val => {
@@ -149,6 +150,7 @@ export default function Admin() {
   const [editForm,   setEditForm]   = useState({})
   const [editSaving, setEditSaving] = useState(false)
   const [editPhoto,  setEditPhoto]  = useState(null)  // { dataUrl, file } | null
+  const [showCamera, setShowCamera] = useState(false)
   const [deleteId,      setDeleteId]      = useState(null)
   const [bulkDeleteIds, setBulkDeleteIds] = useState([])
 
@@ -757,9 +759,13 @@ export default function Admin() {
                     <div style={{ fontSize:12, color:'var(--ink3)', marginBottom:10 }}>
                       {editPhoto ? editPhoto.name : 'JPG or PNG, max 10MB'}
                     </div>
-                    <div style={{ display:'flex', gap:8 }}>
-                      <label style={{ padding:'6px 14px', borderRadius:7, border:'1.5px solid var(--blue)', color:'var(--blue)', fontSize:12, fontWeight:700, cursor:'pointer', background:'var(--blue-s)' }}>
-                        📷 {editPhoto ? 'Change Photo' : 'Upload Photo'}
+                    <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                      <button type="button" onClick={() => setShowCamera(true)}
+                        style={{ padding:'6px 14px', borderRadius:7, border:'1.5px solid var(--blue)', color:'var(--blue)', fontSize:12, fontWeight:700, cursor:'pointer', background:'var(--blue-s)', display:'inline-flex', alignItems:'center', gap:4 }}>
+                        📸 Camera
+                      </button>
+                      <label style={{ padding:'6px 14px', borderRadius:7, border:'1.5px solid var(--border)', color:'var(--ink2)', fontSize:12, fontWeight:700, cursor:'pointer', background:'var(--paper2)', display:'inline-flex', alignItems:'center', gap:4 }}>
+                        📁 Gallery
                         <input type="file" accept="image/*" style={{ display:'none' }}
                            onChange={e => {
                              const file = e.target.files?.[0]
@@ -773,8 +779,8 @@ export default function Admin() {
                         />
                       </label>
                       {editPhoto && (
-                        <button onClick={() => setEditPhoto(null)}
-                          style={{ padding:'6px 12px', borderRadius:7, border:'1.5px solid var(--border)', color:'var(--ink3)', fontSize:12, fontWeight:700, cursor:'pointer', background:'transparent' }}>
+                        <button type="button" onClick={() => setEditPhoto(null)}
+                          style={{ padding:'6px 12px', borderRadius:7, border:'1.5px solid var(--border)', color:'var(--red)', fontSize:12, fontWeight:700, cursor:'pointer', background:'transparent' }}>
                           ✕ Remove
                         </button>
                       )}
@@ -849,6 +855,8 @@ export default function Admin() {
           confirmLabel={filterStat === 'deleted' ? "Delete Permanently" : "Move to Deleted"} 
           danger 
         />
+        
+        <CameraModal open={showCamera} onClose={() => setShowCamera(false)} onCapture={(dataUrl) => setEditPhoto({ dataUrl, name: `captured_${Date.now()}.jpg` })} />
       </div>
     </div>
   )
